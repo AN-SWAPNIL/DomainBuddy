@@ -1,0 +1,10 @@
+create table users (
+  id BIGSERIAL PRIMARY KEY,
+  name VARCHAR NOT NULL,
+  email VARCHAR UNIQUE,
+  password VARCHAR NOT NULL,
+  role VARCHAR,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+

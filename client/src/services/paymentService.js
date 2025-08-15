@@ -8,13 +8,23 @@ export const paymentService = {
     currency = "usd",
     metadata = {}
   ) => {
-    const response = await api.post("/payments/create-intent", {
-      domain,
-      amount,
-      currency,
-      metadata,
-    });
-    return response.data.success ? response.data.data : response.data;
+    try {
+      const response = await api.post("/payments/create-intent", {
+        domain,
+        amount,
+        currency,
+        metadata,
+      });
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      // Handle both 4xx and 5xx errors gracefully
+      if (error.response?.data) {
+        throw new Error(
+          error.response.data.message || "Payment intent creation failed"
+        );
+      }
+      throw error;
+    }
   },
 
   // Confirm payment

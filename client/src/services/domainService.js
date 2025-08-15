@@ -17,14 +17,35 @@ export const domainService = {
         extensions.length > 0
           ? extensions
           : [".com", ".net", ".org", ".io", ".co", ".ai", ".app"];
-      return extensionArray.map((ext) => ({
-        name: `${q}${ext}`,
+      const directMatches = extensionArray.map((ext) => ({
+        domain: `${q}${ext}`,
         available: Math.random() > 0.5,
         price: Math.floor(Math.random() * 50) + 10,
         premium: Math.random() > 0.8,
         registrar: "Namecheap",
         description: `Perfect domain for your ${q} business`,
       }));
+      const aiSuggestions = [
+        {
+          domain: `${q}-ai.com`,
+          brandabilityScore: 9,
+          reasoning: `AI thinks ${q}-ai.com is catchy and modern.`,
+        },
+        {
+          domain: `${q}-hub.io`,
+          brandabilityScore: 7,
+          reasoning: `Great for a tech startup or platform.`,
+        },
+        {
+          domain: `${q}-pro.net`,
+          brandabilityScore: 8,
+          reasoning: `Professional and trustworthy domain name.`,
+        },
+      ];
+      return {
+        directMatches,
+        aiSuggestions,
+      };
     }
   },
 
@@ -75,28 +96,27 @@ export const domainService = {
     } catch (error) {
       console.warn("API not available, returning mock data");
       const suggestions = [];
-      const extensions = [
-        ".com",
-        ".net",
-        ".org",
-        ".io",
-        ".co",
-        ".ai",
-        ".app",
-        ".dev",
-        ".tech",
+      const extensions = [".com", ".net", ".org", ".io", ".co", ".ai", ".app"];
+      const prefixes = [
+        "get",
+        "my",
+        "best",
+        "go",
+        "try",
+        "the",
+        "super",
+        "top",
       ];
-      const prefixes = ["my", "get", "the", "best", "smart", "pro", "super"];
       const suffixes = [
+        "ly",
+        "ify",
         "hub",
         "zone",
-        "spot",
-        "place",
-        "world",
-        "land",
-        "space",
+        "base",
+        "pro",
+        "app",
+        "site",
       ];
-
       for (let i = 0; i < 10; i++) {
         const variation =
           Math.random() > 0.5
@@ -106,7 +126,6 @@ export const domainService = {
             : `${keyword}${
                 suffixes[Math.floor(Math.random() * suffixes.length)]
               }`;
-
         suggestions.push({
           name: `${variation}${
             extensions[Math.floor(Math.random() * extensions.length)]
@@ -124,16 +143,38 @@ export const domainService = {
   // Purchase domain
   purchaseDomain: async (domainData) => {
     try {
+      console.log("Hello there");
       const response = await api.post("/domains/purchase", domainData);
-      return response.data.success ? response.data.data : response.data;
+      
+      console.log("API response:", response);
+      return response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
+      console.warn("API not available, returning mock purchase data");
+      // Mock purchase result matching backend response format
+      // return {
+      //   success: true,
+      //   data: {
+      //     domain: {
+      //       id: `mock-domain-${Math.floor(Math.random() * 100000)}`,
+      //       name: domainData.domain.split(".")[0],
+      //       extension: domainData.domain.split(".").slice(1).join("."),
+      //       full_domain: domainData.domain,
+      //       selling_price: 12.99,
+      //       currency: "USD",
+      //       status: "pending",
+      //     },
+      //     transaction: {
+      //       id: `mock-tx-${Math.floor(Math.random() * 100000)}`,
+      //       amount: 12.99,
+      //       currency: "USD",
+      //       status: "pending",
+      //     },
+      //     message: "Domain purchase initiated. Complete payment to finalize.",
+      //   },
+      // };
       return {
-        success: true,
-        transactionId: `txn_${Date.now()}`,
-        domain: domainData.domain || domainData.name,
-        message: "Domain purchase initiated successfully",
-        paymentUrl: "#",
+        success: false,
+        message: error.message || "Domain purchase failed"
       };
     }
   },
@@ -148,39 +189,43 @@ export const domainService = {
     } catch (error) {
       console.warn("API not available, returning mock data");
       // Mock user domains
+      // return {
+      //   domains: [
+      //     {
+      //       id: 1,
+      //       name: "myawesomeapp.com",
+      //       status: "active",
+      //       expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      //       traffic: 1250,
+      //       estimatedValue: 2500,
+      //       age: 2,
+      //     },
+      //     {
+      //       id: 2,
+      //       name: "startupidea.io",
+      //       status: "expiring",
+      //       expiryDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+      //       traffic: 850,
+      //       estimatedValue: 1800,
+      //       age: 1,
+      //     },
+      //     {
+      //       id: 3,
+      //       name: "techblog.net",
+      //       status: "active",
+      //       expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+      //       traffic: 3200,
+      //       estimatedValue: 5000,
+      //       age: 3,
+      //     },
+      //   ],
+      //   total: 3,
+      //   page,
+      //   limit,
+      // };
       return {
-        domains: [
-          {
-            id: 1,
-            name: "myawesomeapp.com",
-            status: "active",
-            expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-            traffic: 1250,
-            estimatedValue: 2500,
-            age: 2,
-          },
-          {
-            id: 2,
-            name: "startupidea.io",
-            status: "expiring",
-            expiryDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-            traffic: 850,
-            estimatedValue: 1800,
-            age: 1,
-          },
-          {
-            id: 3,
-            name: "techblog.net",
-            status: "active",
-            expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-            traffic: 3200,
-            estimatedValue: 5000,
-            age: 3,
-          },
-        ],
-        total: 3,
-        page,
-        limit,
+        success: false,
+        message: error.message || "Failed to fetch user domains"
       };
     }
   },

@@ -29,7 +29,9 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.0"
+    "morgan": "^1.10.0",
+    "stripe": "^18.4.0",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "jest": "^29.7.0",

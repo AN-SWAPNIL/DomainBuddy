@@ -1,0 +1,40 @@
+Domain Buying Agent
+
+Objective:
+
+Create a domain marketplace platform with search, purchase simulation, and DNS management capabilities.
+Core Requirements (Must Have):
+
+-Domain availability search across multiple TLDs (.com, .net, .org, etc.)
+-Price comparison from registrar API
+-Simulated purchase workflow with cart system
+-DNS configuration interface after "purchase"
+-Subdomain creation on purchased domains
+-User account with domain portfolio management
+
+Technical Specifications:
+
+-Namecheap API (sandbox mode) for domain searches
+-Mock payment flow with receipt generation
+-Database to track "purchased" domains per user
+-DNS management simulation interface
+-Price calculation with configurable markup (e.g., 15% profit margin)
+-Domain expiry tracking system
+
+Deliverables:
+-Clean and reusable code
+-Domain search interface with suggestions
+-Shopping cart and checkout flow
+-Payment simulation (no real charges)
+-User dashboard with domain portfolio
+-DNS management panel
+-Admin panel for pricing configuration
+
+Free Resources:
+
+-Namecheap API Sandbox (free test environment)
+-WHO.IS API (free tier - 500 requests/month)
+-Cloudflare API (free DNS management for testing)
+-Stripe Test Mode (payment UI without charges)
+-JSONWhois API (free tier available)
+-Supabase (free database + auth)

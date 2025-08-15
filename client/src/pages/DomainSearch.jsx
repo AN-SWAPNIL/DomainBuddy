@@ -27,62 +27,61 @@ const DomainSearch = () => {
     setLoading(true);
     try {
       // Check if search term contains a dot (extension)
-      const hasExtension = searchTerm.includes('.');
-      
+      const hasExtension = searchTerm.includes(".");
+
       if (hasExtension) {
         // Use checkAvailability for domains with extensions
-        console.log("🔍 Checking availability for domain with extension:", searchTerm);
+        console.log(
+          "🔍 Checking availability for domain with extension:",
+          searchTerm
+        );
         const result = await domainService.checkAvailability(searchTerm);
         console.log("🔍 Domain availability result:", result);
 
         // Convert single domain result to expected format
-        const singleDomain = [{
-          name: result.domain || searchTerm,
-          available: result.available,
-          price: result.price || 12.99,
-          premium: false,
-          registrar: "Namecheap",
-          description: `Availability check for ${searchTerm}`,
-        }];
+        const singleDomain = [
+          {
+            name: result.domain || searchTerm,
+            available: result.available,
+            price: result.price || 12.99,
+            premium: false,
+            registrar: "Namecheap",
+            description: `Availability check for ${searchTerm}`,
+          },
+        ];
 
         setSearchResults(singleDomain);
         console.log("✅ Processed single domain result:", singleDomain);
       } else {
         // Use searchDomains for search terms without extensions
-        console.log("🔍 Searching domains for term without extension:", searchTerm);
+        console.log(
+          "🔍 Searching domains for term without extension:",
+          searchTerm
+        );
         const results = await domainService.searchDomains(searchTerm);
         console.log("🔍 Domain search results:", results);
 
-        // The API returns {directMatches: [], aiSuggestions: []}
-        // Combine both arrays for display
+        // The API returns {query: 'searchTerm', results: []}
+        // Convert results to the expected format
         const allDomains = [];
 
-        if (results.directMatches) {
-          // Convert directMatches to the expected format
-          const directDomains = results.directMatches.map((match) => ({
-            name: match.domain.includes(".")
-              ? match.domain
-              : `${match.domain}.com`,
-            available: match.available,
-            price: match.price || 12.99,
-            premium: false,
-            registrar: "Namecheap",
-            description: `Direct match for ${searchTerm}`,
-          }));
-          allDomains.push(...directDomains);
-        }
-
-        if (results.aiSuggestions) {
-          // Convert aiSuggestions to the expected format
-          const aiDomains = results.aiSuggestions.map((suggestion) => ({
-            name: suggestion.domain,
-            available: true, // AI suggestions are typically available
-            price: 12.99,
-            premium: suggestion.brandabilityScore > 8,
-            registrar: "Namecheap",
-            description: suggestion.reasoning,
-          }));
-          allDomains.push(...aiDomains);
+        if (results.results && Array.isArray(results.results)) {
+          // Convert results to the expected format
+          const domainList = results.results.map((result) => {
+            console.log("🔄 Processing domain result:", result);
+            return {
+              name: result.domain,
+              available: result.available,
+              price: result.available ? result.price || 12.99 : 0,
+              premium: result.isPremium || false,
+              registrar: "Namecheap",
+              description: result.available
+                ? `Available for $${result.price || 12.99}`
+                : result.reason || "Not available",
+            };
+          });
+          console.log("🔄 Mapped domain list:", domainList);
+          allDomains.push(...domainList);
         }
 
         setSearchResults(allDomains);
@@ -91,7 +90,9 @@ const DomainSearch = () => {
     } catch (error) {
       console.error("Search error:", error);
       // Show user-friendly error message
-      alert("Search failed. Please try again or check your internet connection.");
+      alert(
+        "Search failed. Please try again or check your internet connection."
+      );
     } finally {
       setLoading(false);
     }
@@ -157,34 +158,22 @@ const DomainSearch = () => {
       // Prepare the request data as expected by the backend
       const purchaseData = {
         domain: domainName,
-        years: 1, // Default to 1 year
-        contactInfo: {
-          firstName: "John",
-          lastName: "Doe",
-          email: "user@example.com",
-          phone: "+1.1234567890",
-          address: "123 Main St",
-          city: "Anytown",
-          country: "US",
-        },
       };
 
       const result = await domainService.purchaseDomain(purchaseData);
       console.log("✅ Purchase result:", result);
 
-      if (result.success || result.domain) {
+      if (result.success) {
         // Add to purchased domains set to prevent re-purchasing
         setPurchasedDomains((prev) => new Set([...prev, domainName]));
 
         // Handle successful purchase initiation
-        const transactionId =
-          result.transaction?.id || result.transaction?._id || "N/A";
-
-        // Redirect to payment page with domain and amount
-        const domain = result.domain || result.data?.domain;
-        const amount = domain?.pricing?.sellingPrice || 12.99;
+        const transactionId = result.data.transaction?.id || "N/A";
+        const domain = result.data.domain;
+        const amount = domain?.selling_price || 12.99;
 
         // Navigate to payment page with URL parameters
+
         window.location.href = `/payment?domain=${encodeURIComponent(
           domainName
         )}&amount=${amount}&transaction=${transactionId}`;

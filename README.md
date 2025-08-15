@@ -1,1 +1,1 @@
-# DomainBuddy
+### DomainBuddy - A domain buying agent

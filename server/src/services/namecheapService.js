@@ -1,5 +1,6 @@
 const axios = require("axios");
 const { parseString } = require("xml2js");
+const supabase = require("../config/database.js");
 
 class NamecheapService {
   constructor() {
@@ -12,23 +13,102 @@ class NamecheapService {
       : "https://api.namecheap.com/xml.response";
   }
 
+  // Method to get current public IP if not set in environment
+  async getCurrentIP() {
+    try {
+      const response = await axios.get("https://ipinfo.io/ip");
+      return response.data.trim();
+    } catch (error) {
+      console.error("Failed to get current IP:", error.message);
+      return this.clientIp || "127.0.0.1";
+    }
+  }
+
   async checkDomainAvailability(domainName) {
     try {
+      // First, check if domain exists in our database
+      const { data: existingDomain, error: dbError } = await supabase
+        .from("domains")
+        .select("id, full_domain, status")
+        .eq("full_domain", domainName.toLowerCase())
+        .single();
+
+      if (dbError && dbError.code !== "PGRST116") {
+        console.error("Database check error:", dbError);
+        // Continue with API check if database check fails
+      }
+
+      // If domain exists in our database, it's not available
+      if (existingDomain) {
+        console.log(`Domain ${domainName} found in database - not available`);
+        return {
+          domain: domainName,
+          available: false,
+          price: 0,
+          currency: "USD",
+          isPremium: false,
+          premiumPrices: null,
+          reason: "Domain already registered in our system",
+        };
+      }
+
+      // If not in database, check with Namecheap API
+      console.log(
+        `Domain ${domainName} not in database - checking with Namecheap`
+      );
+
+      // Use environment IP or detect current IP
+      const clientIp = this.clientIp || (await this.getCurrentIP());
+
       const params = {
         ApiUser: this.apiUser,
         ApiKey: this.apiKey,
         UserName: this.apiUser,
         Command: "namecheap.domains.check",
-        ClientIp: this.clientIp,
+        ClientIp: clientIp,
         DomainList: domainName,
       };
 
+      console.log("Using IP address:", clientIp);
       const response = await axios.get(this.baseUrl, { params });
+
+      // Check for API errors in the XML response first
+      if (response.data.includes('Status="ERROR"')) {
+        console.error("Namecheap API returned an error");
+
+        // Extract error message for better debugging
+        const errorMatch = response.data.match(
+          /<Error Number="(\d+)">([^<]+)<\/Error>/
+        );
+        if (errorMatch) {
+          const errorNumber = errorMatch[1];
+          const errorMessage = errorMatch[2];
+          console.error(`Error ${errorNumber}: ${errorMessage}`);
+
+          // Handle specific errors
+          if (errorNumber === "1011150") {
+            console.error("⚠️  IP Address not whitelisted with Namecheap API");
+            console.error("Current IP being used:", clientIp);
+            console.error("Please whitelist this IP in your Namecheap account");
+            console.error(
+              "Visit: https://ap.www.namecheap.com/settings/tools/apiaccess/"
+            );
+          }
+
+          // Throw specific error instead of fallback
+          throw new Error(
+            `Namecheap API Error ${errorNumber}: ${errorMessage}`
+          );
+        }
+
+        throw new Error("Namecheap API returned an error response");
+      }
 
       // Parse XML response properly
       const result = await this.parseXmlResponse(response.data);
       const domainResult = this.extractDomainInfo(result, domainName);
       console.log("Domain check result:", domainResult);
+
       // If there was an API error, throw it instead of using fallback
       if (domainResult.error) {
         throw new Error(`Namecheap API Error: ${domainResult.error}`);
@@ -45,7 +125,15 @@ class NamecheapService {
     } catch (error) {
       console.error("Namecheap API Error:", error.message);
 
-      // Fallback to mock data for development/testing
+      // Re-throw the error instead of providing fallback data for critical errors
+      if (
+        error.message.includes("1011150") ||
+        error.message.includes("API Error")
+      ) {
+        throw error;
+      }
+
+      // Fallback to mock data for development/testing only for network errors
       console.log("Using fallback pricing for domain:", domainName);
       return {
         domain: domainName,
@@ -59,12 +147,15 @@ class NamecheapService {
 
   async registerDomain(domainName, years = 1, contactInfo) {
     try {
+      // Use environment IP or detect current IP
+      const clientIp = this.clientIp || (await this.getCurrentIP());
+
       const params = {
         ApiUser: this.apiUser,
         ApiKey: this.apiKey,
         UserName: this.apiUser,
         Command: "namecheap.domains.create",
-        ClientIp: this.clientIp,
+        ClientIp: clientIp,
         DomainName: domainName,
         Years: years,
         // Contact information parameters

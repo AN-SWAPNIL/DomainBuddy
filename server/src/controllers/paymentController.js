@@ -42,12 +42,11 @@ const createPaymentIntent = async (req, res, next) => {
       const domainName = domainParts[0];
       const extension = domainParts.slice(1).join(".");
 
-      // Check if domain already exists with registered/pending status for any user
+      // Check if domain already exists in database for ANY user (any status)
       const { data: existingDomainAny, error: existingError } = await supabase
         .from("domains")
         .select("id, status, owner_id")
         .eq("full_domain", domain.toLowerCase())
-        .in("status", ["registered", "pending"])
         .single();
 
       if (existingError && existingError.code !== "PGRST116") {
@@ -59,7 +58,10 @@ const createPaymentIntent = async (req, res, next) => {
       }
 
       if (existingDomainAny) {
-        // Domain is already taken or being processed
+        // Domain exists in database - not available regardless of status
+        console.log(
+          `Domain ${domain} found in database with status: ${existingDomainAny.status} - not available`
+        );
         return res.status(400).json({
           success: false,
           message: "This domain is no longer available for purchase",

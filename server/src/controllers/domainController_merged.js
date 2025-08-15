@@ -7,9 +7,7 @@ const cleanupPendingRecords = async () => {
   try {
     const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
 
-    console.log(`🧹 Starting cleanup for records older than: ${oneMinuteAgo}`);
-
-    // First, delete all pending transactions older than 1 minute
+    // Delete pending transactions older than 1 minute
     const { data: expiredTransactions, error: transactionError } =
       await supabase
         .from("transactions")
@@ -20,36 +18,24 @@ const cleanupPendingRecords = async () => {
 
     if (transactionError) {
       console.error("Error cleaning up transactions:", transactionError);
-    } else if (expiredTransactions && expiredTransactions.length > 0) {
-      console.log(
-        `🗑️ Deleted ${expiredTransactions.length} pending transactions`
-      );
+      return;
     }
 
-    // Then, delete all pending domains older than 1 minute (regardless of transaction status)
-    const { data: expiredDomains, error: domainError } = await supabase
-      .from("domains")
-      .delete()
-      .eq("status", "pending")
-      .lt("created_at", oneMinuteAgo)
-      .select("id, full_domain");
+    // Delete corresponding domains
+    if (expiredTransactions && expiredTransactions.length > 0) {
+      const domainIds = expiredTransactions.map((t) => t.domain_id);
 
-    if (domainError) {
-      console.error("Error cleaning up domains:", domainError);
-    } else if (expiredDomains && expiredDomains.length > 0) {
-      console.log(
-        `🗑️ Deleted ${expiredDomains.length} pending domains:`,
-        expiredDomains.map((d) => d.full_domain).join(", ")
-      );
-    }
+      const { error: domainError } = await supabase
+        .from("domains")
+        .delete()
+        .in("id", domainIds)
+        .eq("status", "pending");
 
-    // Log summary
-    const totalCleaned =
-      (expiredTransactions?.length || 0) + (expiredDomains?.length || 0);
-    if (totalCleaned > 0) {
-      console.log(
-        `✅ Cleanup completed: ${totalCleaned} total records removed`
-      );
+      if (domainError) {
+        console.error("Error cleaning up domains:", domainError);
+      } else {
+        console.log(`Cleaned up ${expiredTransactions.length} pending records`);
+      }
     }
   } catch (error) {
     console.error("Cleanup error:", error);

@@ -26,45 +26,73 @@ const DomainSearch = () => {
 
     setLoading(true);
     try {
-      const results = await domainService.searchDomains(searchTerm);
-      console.log("🔍 Domain search results:", results);
+      // Check if search term contains a dot (extension)
+      const hasExtension = searchTerm.includes(".");
 
-      // The API returns {directMatches: [], aiSuggestions: []}
-      // Combine both arrays for display
-      const allDomains = [];
+      if (hasExtension) {
+        // Use checkAvailability for domains with extensions
+        console.log(
+          "🔍 Checking availability for domain with extension:",
+          searchTerm
+        );
+        const result = await domainService.checkAvailability(searchTerm);
+        console.log("🔍 Domain availability result:", result);
 
-      if (results.directMatches) {
-        // Convert directMatches to the expected format
-        const directDomains = results.directMatches.map((match) => ({
-          name: match.domain.includes(".")
-            ? match.domain
-            : `${match.domain}.com`,
-          available: match.available,
-          price: match.price || 12.99,
-          premium: false,
-          registrar: "Namecheap",
-          description: `Direct match for ${searchTerm}`,
-        }));
-        allDomains.push(...directDomains);
+        // Convert single domain result to expected format
+        const singleDomain = [
+          {
+            name: result.domain || searchTerm,
+            available: result.available,
+            price: result.price || 12.99,
+            premium: false,
+            registrar: "Namecheap",
+            description: `Availability check for ${searchTerm}`,
+          },
+        ];
+
+        setSearchResults(singleDomain);
+        console.log("✅ Processed single domain result:", singleDomain);
+      } else {
+        // Use searchDomains for search terms without extensions
+        console.log(
+          "🔍 Searching domains for term without extension:",
+          searchTerm
+        );
+        const results = await domainService.searchDomains(searchTerm);
+        console.log("🔍 Domain search results:", results);
+
+        // The API returns {query: 'searchTerm', results: []}
+        // Convert results to the expected format
+        const allDomains = [];
+
+        if (results.results && Array.isArray(results.results)) {
+          // Convert results to the expected format
+          const domainList = results.results.map((result) => {
+            console.log("🔄 Processing domain result:", result);
+            return {
+              name: result.domain,
+              available: result.available,
+              price: result.available ? result.price || 12.99 : 0,
+              premium: result.isPremium || false,
+              registrar: "Namecheap",
+              description: result.available
+                ? `Available for $${result.price || 12.99}`
+                : result.reason || "Not available",
+            };
+          });
+          console.log("🔄 Mapped domain list:", domainList);
+          allDomains.push(...domainList);
+        }
+
+        setSearchResults(allDomains);
+        console.log("✅ Processed search results:", allDomains);
       }
-
-      if (results.aiSuggestions) {
-        // Convert aiSuggestions to the expected format
-        const aiDomains = results.aiSuggestions.map((suggestion) => ({
-          name: suggestion.domain,
-          available: true, // AI suggestions are typically available
-          price: 12.99,
-          premium: suggestion.brandabilityScore > 8,
-          registrar: "Namecheap",
-          description: suggestion.reasoning,
-        }));
-        allDomains.push(...aiDomains);
-      }
-
-      setSearchResults(allDomains);
-      console.log("✅ Processed search results:", allDomains);
     } catch (error) {
       console.error("Search error:", error);
+      // Show user-friendly error message
+      alert(
+        "Search failed. Please try again or check your internet connection."
+      );
     } finally {
       setLoading(false);
     }
@@ -295,7 +323,7 @@ const DomainSearch = () => {
                       type="text"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Enter domain name (e.g., myawesomesite)"
+                      placeholder="Enter domain name (e.g., mysite or mysite.com)"
                       className="input"
                     />
                   </div>

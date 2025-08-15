@@ -8,6 +8,7 @@ require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
+const domainRoutes = require('./routes/domain');
 const { errorHandler } = require('./middleware/errorHandler');
 const { notFound } = require('./middleware/notFound');
 
@@ -44,9 +45,8 @@ const corsOptions = {
     const allowedOrigins = [
       process.env.CLIENT_URL || 'http://localhost:5173',
       'http://localhost:3000',
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:3000'
+      'http://localhost:5174',
+      'http://127.0.0.1:5174',
     ];
     
     // Allow ngrok URLs
@@ -85,6 +85,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/domains', domainRoutes);
 
 // Test endpoint
 app.get('/api/test', (req, res) => {

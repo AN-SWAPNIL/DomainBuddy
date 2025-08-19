@@ -1,7 +1,7 @@
 // Simple static API URL hook - no more complexity!
 export const useApiUrl = () => {
   return {
-    apiUrl: "https://regular-innocent-pony.ngrok-free.app/api",
-    isNgrokActive: true,
+    apiUrl: "http://localhost:5001/api",
+    isNgrokActive: false,
   };
 };

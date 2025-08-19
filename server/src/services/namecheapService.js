@@ -60,7 +60,8 @@ class NamecheapService {
       // Use environment IP or detect current IP
       const clientIp = this.clientIp || (await this.getCurrentIP());
 
-      const params = {
+      // Step 1: Check domain availability
+      const availabilityParams = {
         ApiUser: this.apiUser,
         ApiKey: this.apiKey,
         UserName: this.apiUser,
@@ -69,15 +70,16 @@ class NamecheapService {
         DomainList: domainName,
       };
 
+      console.log("Checking availability for:", domainName);
       console.log("Using IP address:", clientIp);
-      const response = await axios.get(this.baseUrl, { params });
+      const availabilityResponse = await axios.get(this.baseUrl, { params: availabilityParams });
 
       // Check for API errors in the XML response first
-      if (response.data.includes('Status="ERROR"')) {
+      if (availabilityResponse.data.includes('Status="ERROR"')) {
         console.error("Namecheap API returned an error");
 
         // Extract error message for better debugging
-        const errorMatch = response.data.match(
+        const errorMatch = availabilityResponse.data.match(
           /<Error Number="(\d+)">([^<]+)<\/Error>/
         );
         if (errorMatch) {
@@ -104,23 +106,75 @@ class NamecheapService {
         throw new Error("Namecheap API returned an error response");
       }
 
-      // Parse XML response properly
-      const result = await this.parseXmlResponse(response.data);
-      const domainResult = this.extractDomainInfo(result, domainName);
-      console.log("Domain check result:", domainResult);
+      // Parse availability response
+      const availabilityResult = await this.parseXmlResponse(availabilityResponse.data);
+      const domainResult = this.extractDomainInfo(availabilityResult, domainName);
+      console.log("Domain availability result:", domainResult);
 
       // If there was an API error, throw it instead of using fallback
       if (domainResult.error) {
         throw new Error(`Namecheap API Error: ${domainResult.error}`);
       }
 
+      let finalPrice = null;
+      let isPremium = domainResult.isPremium;
+      let premiumPrices = domainResult.premiumPrices;
+
+      // Step 2: If domain is available, get pricing information
+      if (domainResult.available) {
+        try {
+          // Extract extension from domain name (e.g., "com" from "example.com")
+          const extension = domainName.split('.').pop().toLowerCase();
+          
+          console.log(`Getting pricing for extension: ${extension}`);
+          
+          const pricingParams = {
+            ApiUser: this.apiUser,
+            ApiKey: this.apiKey,
+            UserName: this.apiUser,
+            Command: "namecheap.users.getPricing",
+            ClientIp: clientIp,
+            ProductType: "DOMAIN",
+            ProductName: extension.toUpperCase(),
+            ActionName: "REGISTER"
+          };
+
+          const pricingResponse = await axios.get(this.baseUrl, { params: pricingParams });
+          console.log("Pricing API response:", pricingResponse.data);
+          
+          // Check for pricing API errors
+          if (pricingResponse.data.includes('Status="ERROR"')) {
+            console.warn("Pricing API returned error, using default price");
+            finalPrice = this.getDefaultPrice(domainName);
+          } else {
+            // Parse pricing response
+            const pricingResult = await this.parseXmlResponse(pricingResponse.data);
+            const extractedPrice = this.extractPricingForOneYear(pricingResult, extension);
+            
+            if (extractedPrice !== null) {
+              finalPrice = extractedPrice;
+              console.log(`Got pricing from API: $${finalPrice} for ${extension}`);
+            } else {
+              console.warn("Could not extract pricing from API, using default");
+              finalPrice = this.getDefaultPrice(domainName);
+            }
+          }
+        } catch (pricingError) {
+          console.warn("Error getting pricing from API:", pricingError.message);
+          finalPrice = this.getDefaultPrice(domainName);
+        }
+      } else {
+        // Domain not available, set price to 0
+        finalPrice = 0;
+      }
+
       return {
         domain: domainName,
         available: domainResult.available,
-        price: domainResult.price || this.getDefaultPrice(domainName),
+        price: finalPrice,
         currency: "USD",
-        isPremium: domainResult.isPremium,
-        premiumPrices: domainResult.premiumPrices,
+        isPremium: isPremium,
+        premiumPrices: premiumPrices,
       };
     } catch (error) {
       console.error("Namecheap API Error:", error.message);
@@ -380,6 +434,73 @@ class NamecheapService {
     } catch (error) {
       console.error("Error extracting pricing info:", error);
       return {};
+    }
+  }
+
+  extractPricingForOneYear(xmlResult, extension) {
+    try {
+      console.log(`Extracting pricing for extension: ${extension}`);
+      
+      const commandResponse = xmlResult?.ApiResponse?.CommandResponse?.[0];
+      const userGetPricingResult = commandResponse?.UserGetPricingResult?.[0];
+      const productTypes = userGetPricingResult?.ProductType || [];
+
+      console.log(`Found ${productTypes.length} product types`);
+
+      // Look for the product type (it's "domains" not "DOMAIN" in the response)
+      for (const productType of productTypes) {
+        const productTypeName = productType.$.Name;
+        console.log(`Checking product type: ${productTypeName}`);
+        
+        if (productTypeName.toLowerCase() === "domains") {
+          const productCategories = productType.ProductCategory || [];
+          console.log(`Found ${productCategories.length} product categories`);
+          
+          // Look for "register" category
+          for (const category of productCategories) {
+            const categoryName = category.$.Name;
+            console.log(`Checking category: ${categoryName}`);
+            
+            if (categoryName.toLowerCase() === "register") {
+              const products = category.Product || [];
+              console.log(`Found ${products.length} products in register category`);
+              
+              // Find the product matching our extension
+              for (const product of products) {
+                const productName = product.$.Name.toLowerCase();
+                console.log(`Checking product: ${productName} against ${extension.toLowerCase()}`);
+                
+                if (productName === extension.toLowerCase()) {
+                  const prices = product.Price || [];
+                  console.log(`Found ${prices.length} price entries for ${extension}`);
+                  
+                  // Look for 1-year pricing
+                  for (const price of prices) {
+                    const duration = price.$.Duration;
+                    const durationType = price.$.DurationType;
+                    console.log(`Checking price: Duration=${duration}, DurationType=${durationType}`);
+                    
+                    if (duration === "1" && durationType.toLowerCase() === "year") {
+                      const priceValue = parseFloat(price.$.Price);
+                      const additionalCost = parseFloat(price.$.AdditionalCost) || 0;
+                      const totalPrice = priceValue + additionalCost;
+                      
+                      console.log(`Found 1-year price for ${extension}: $${priceValue} + $${additionalCost} = $${totalPrice}`);
+                      return totalPrice;
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      console.warn(`No 1-year pricing found for extension: ${extension}`);
+      return null;
+    } catch (error) {
+      console.error("Error extracting 1-year pricing:", error);
+      return null;
     }
   }
 

@@ -72,34 +72,76 @@ const searchDomains = async (req, res, next) => {
 
     const { q: query, extensions = [".com", ".net", ".org"] } = req.query;
 
+    console.log(`🔍 Searching domains for: ${query} with extensions: ${extensions}`);
+
     // Basic domain search
     const searchResults = [];
     const extensionArray = Array.isArray(extensions)
       ? extensions
       : extensions.split(",");
 
-    // Check availability for direct matches
-    for (const ext of extensionArray) {
+    // Limit extensions to prevent too many API calls
+    const limitedExtensions = extensionArray.slice(0, 5);
+
+    // Check availability for direct matches with Promise.allSettled for better error handling
+    const domainChecks = limitedExtensions.map(async (ext) => {
       const domain = `${query}${ext}`;
       try {
-        // Check domain availability directly with Namecheap API
-        const availability = await namecheapService.checkDomainAvailability(
-          domain
-        );
-        searchResults.push(availability);
+        // Set a timeout for individual domain checks
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Domain check timeout')), 15000);
+        });
+
+        const availability = await Promise.race([
+          namecheapService.checkDomainAvailability(domain),
+          timeoutPromise
+        ]);
+
+        return {
+          domain,
+          ...availability,
+          success: true
+        };
       } catch (error) {
-        console.log(`Error checking ${domain}:`, error.message);
+        console.log(`⚠️ Error checking ${domain}:`, error.message);
         // Add fallback result for failed API calls
-        searchResults.push({
+        return {
           domain,
           available: false,
-          price: 0,
+          price: 12.99,
           currency: "USD",
+          isPremium: false,
           message: "Unable to check availability",
           error: true,
+          success: false
+        };
+      }
+    });
+
+    // Wait for all domain checks with a timeout
+    const results = await Promise.allSettled(domainChecks);
+    
+    // Process results
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        searchResults.push(result.value);
+      } else {
+        console.log('Domain check promise rejected:', result.reason);
+        // Add fallback for rejected promises
+        searchResults.push({
+          domain: `${query}.com`,
+          available: false,
+          price: 12.99,
+          currency: "USD",
+          isPremium: false,
+          message: "Service temporarily unavailable",
+          error: true,
+          success: false
         });
       }
-    }
+    });
+
+    console.log(`✅ Domain search completed for ${query}, found ${searchResults.length} results`);
 
     res.status(200).json({
       success: true,
@@ -110,7 +152,24 @@ const searchDomains = async (req, res, next) => {
     });
   } catch (error) {
     console.error("Domain search error:", error);
-    next(error);
+    
+    // Return a fallback response even if there's an error
+    res.status(200).json({
+      success: true,
+      data: {
+        query: req.query.q || "unknown",
+        results: [{
+          domain: `${req.query.q || "example"}.com`,
+          available: false,
+          price: 12.99,
+          currency: "USD",
+          isPremium: false,
+          message: "Service temporarily unavailable",
+          error: true,
+          success: false
+        }]
+      },
+    });
   }
 };
 

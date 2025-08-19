@@ -10,6 +10,7 @@ const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
 const domainRoutes = require("./routes/domain");
 const paymentRoutes = require("./routes/payment");
+const aiRoutes = require("./routes/ai");
 const { errorHandler } = require("./middleware/errorHandler");
 const { notFound } = require("./middleware/notFound");
 
@@ -103,6 +104,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/domains", domainRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Test endpoint
 app.get("/api/test", (req, res) => {

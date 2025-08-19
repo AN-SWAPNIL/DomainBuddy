@@ -2,23 +2,17 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MagnifyingGlassIcon,
-  SparklesIcon,
   CheckCircleIcon,
   XCircleIcon,
   ClockIcon,
 } from "@heroicons/react/24/outline";
 import { domainService } from "../services/domainService";
-import { aiService } from "../services/aiService";
 
 const DomainSearch = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
-  const [aiSuggestions, setAiSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [loadingAI, setLoadingAI] = useState(false);
   const [selectedDomains, setSelectedDomains] = useState(new Set());
-  const [businessDescription, setBusinessDescription] = useState("");
-  const [activeTab, setActiveTab] = useState("search");
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -95,41 +89,6 @@ const DomainSearch = () => {
       );
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleAISuggestions = async () => {
-    if (!businessDescription.trim()) return;
-
-    setLoadingAI(true);
-    try {
-      const response = await aiService.getDomainSuggestions(
-        businessDescription
-      );
-      console.log("🔍 AI suggestions response:", response);
-
-      // The API returns {suggestions: [...]}
-      const suggestions = response.suggestions || [];
-
-      // Convert suggestions to the expected format
-      const formattedSuggestions = suggestions.map((suggestion, index) => ({
-        name: suggestion.domain || suggestion.name || `suggestion-${index}.com`,
-        available: true, // AI suggestions are typically available
-        price: suggestion.price || 12.99,
-        premium: suggestion.brandabilityScore > 8,
-        registrar: "Namecheap",
-        description:
-          suggestion.reasoning ||
-          suggestion.description ||
-          "AI generated domain suggestion",
-      }));
-
-      setAiSuggestions(formattedSuggestions);
-      console.log("✅ Processed AI suggestions:", formattedSuggestions);
-    } catch (error) {
-      console.error("AI suggestions error:", error);
-    } finally {
-      setLoadingAI(false);
     }
   };
 
@@ -274,192 +233,60 @@ const DomainSearch = () => {
             Find Your Perfect Domain
           </h1>
           <p className="text-gray-600">
-            Search for domains or get AI-powered suggestions for your business
+            Search for available domains
           </p>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-white rounded-lg p-1 shadow-sm border border-gray-200">
+        {/* Search Form */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <form onSubmit={handleSearch} className="flex space-x-4">
+            <div className="flex-1">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Enter domain name (e.g., mysite or mysite.com)"
+                className="input"
+              />
+            </div>
             <button
-              onClick={() => setActiveTab("search")}
-              className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "search"
-                  ? "bg-primary-600 text-white"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
+              type="submit"
+              disabled={loading}
+              className="btn-primary flex items-center space-x-2"
             >
-              <MagnifyingGlassIcon className="h-4 w-4 inline mr-2" />
-              Search Domains
+              {loading ? (
+                <div className="loading-dots">
+                  <div></div>
+                  <div></div>
+                  <div></div>
+                </div>
+              ) : (
+                <>
+                  <MagnifyingGlassIcon className="h-4 w-4" />
+                  <span>Search</span>
+                </>
+              )}
             </button>
-            <button
-              onClick={() => setActiveTab("ai")}
-              className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
-                activeTab === "ai"
-                  ? "bg-primary-600 text-white"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              <SparklesIcon className="h-4 w-4 inline mr-2" />
-              AI Suggestions
-            </button>
-          </div>
+          </form>
         </div>
 
-        <AnimatePresence mode="wait">
-          {activeTab === "search" && (
-            <motion.div
-              key="search"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="space-y-6"
-            >
-              {/* Search Form */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <form onSubmit={handleSearch} className="flex space-x-4">
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      placeholder="Enter domain name (e.g., mysite or mysite.com)"
-                      className="input"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="btn-primary flex items-center space-x-2"
-                  >
-                    {loading ? (
-                      <div className="loading-dots">
-                        <div></div>
-                        <div></div>
-                        <div></div>
-                      </div>
-                    ) : (
-                      <>
-                        <MagnifyingGlassIcon className="h-4 w-4" />
-                        <span>Search</span>
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-
-              {/* Search Results */}
-              {searchResults.length > 0 && (
-                <div className="space-y-4">
-                  <h2 className="text-xl font-semibold text-gray-900">
-                    Search Results
-                  </h2>
-                  <div className="grid gap-4">
-                    {searchResults.map((domain, index) => (
-                      <DomainCard
-                        key={index}
-                        domain={domain}
-                        onPurchase={handlePurchase}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === "ai" && (
-            <motion.div
-              key="ai"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="space-y-6"
-            >
-              {/* AI Input Form */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Describe Your Business
-                </h2>
-                <div className="space-y-4">
-                  <textarea
-                    value={businessDescription}
-                    onChange={(e) => setBusinessDescription(e.target.value)}
-                    placeholder="Tell us about your business, target audience, industry, or keywords..."
-                    rows={4}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  />
-                  <button
-                    onClick={handleAISuggestions}
-                    disabled={loadingAI || !businessDescription.trim()}
-                    className="btn-primary flex items-center space-x-2"
-                  >
-                    {loadingAI ? (
-                      <div className="loading-dots">
-                        <div></div>
-                        <div></div>
-                        <div></div>
-                      </div>
-                    ) : (
-                      <>
-                        <SparklesIcon className="h-4 w-4" />
-                        <span>Get AI Suggestions</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* AI Suggestions */}
-              {aiSuggestions.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-gray-900">
-                      AI Suggestions
-                    </h2>
-                    {selectedDomains.size > 0 && (
-                      <div className="text-sm text-gray-600">
-                        {selectedDomains.size} selected
-                      </div>
-                    )}
-                  </div>
-                  <div className="grid gap-4">
-                    {aiSuggestions.map((domain, index) => (
-                      <DomainCard
-                        key={index}
-                        domain={domain}
-                        onPurchase={handlePurchase}
-                        onToggleSelect={toggleDomainSelection}
-                        isSelected={selectedDomains.has(domain.name)}
-                        showSelect={true}
-                      />
-                    ))}
-                  </div>
-                  {selectedDomains.size > 0 && (
-                    <div className="bg-white rounded-lg border border-gray-200 p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="font-medium text-gray-900">
-                            Bulk Actions
-                          </h3>
-                          <p className="text-sm text-gray-600">
-                            {selectedDomains.size} domains selected
-                          </p>
-                        </div>
-                        <div className="space-x-2">
-                          <button className="btn-outline">
-                            Compare Selected
-                          </button>
-                          <button className="btn-primary">Purchase All</button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Search Results */}
+        {searchResults.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Search Results
+            </h2>
+            <div className="grid gap-4">
+              {searchResults.map((domain, index) => (
+                <DomainCard
+                  key={index}
+                  domain={domain}
+                  onPurchase={handlePurchase}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

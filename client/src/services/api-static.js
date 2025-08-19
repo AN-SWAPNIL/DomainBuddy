@@ -4,8 +4,8 @@ import axios from "axios";
 const API_URL =
   import.meta.env.VITE_NGROK_URL ||
   import.meta.env.VITE_API_URL ||
-  "http://localhost:5000/api";
-const API_TIMEOUT = import.meta.env.VITE_API_TIMEOUT || 10000;
+  "http://localhost:5001/api";  // Updated to use port 5001
+const API_TIMEOUT = import.meta.env.VITE_API_TIMEOUT || 30000; // Increased to 30 seconds
 
 console.log("🌐 Using API URL:", API_URL);
 

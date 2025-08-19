@@ -44,10 +44,19 @@ export const aiService = {
         localStorage.getItem("token") ? "Present" : "Missing"
       );
 
-      const response = await api.post("/ai/chat", {
+      // Create a timeout promise for additional safety
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("AI request took too long. The AI might be processing complex domain searches. Please try again."));
+        }, 35000); // 35 seconds - slightly longer than API timeout
+      });
+
+      const requestPromise = api.post("/ai/chat", {
         message,
         conversationId,
       });
+
+      const response = await Promise.race([requestPromise, timeoutPromise]);
 
       console.log("✅ AI chat raw response:", response.data);
 
@@ -72,6 +81,13 @@ export const aiService = {
         },
       });
 
+      // Check if it's a timeout error
+      if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+        throw new Error(
+          "The AI service is taking longer than usual. This might happen when checking domain availability. Please try again with a simpler request."
+        );
+      }
+
       // Check if it's an authentication error
       if (error.response?.status === 401) {
         throw new Error("Please log in to continue using the AI consultant.");
@@ -80,7 +96,7 @@ export const aiService = {
       // Check if it's a network error
       if (!error.response) {
         throw new Error(
-          "Unable to connect to AI service. Please check your internet connection."
+          "Unable to connect to AI service. Please ensure the server is running and try again."
         );
       }
 

@@ -4,44 +4,81 @@ export const domainService = {
   // Search for domains
   searchDomains: async (q, extensions = []) => {
     try {
+      console.log(`🔍 Searching domains for term without extension: ${q}`);
+      
       const params = { q };
       if (extensions.length > 0) {
         params.extensions = extensions;
       }
-      const response = await api.get("/domains/search", { params });
-      return response.data.success ? response.data.data : response.data;
+      
+      // Create a timeout for the request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+      
+      const response = await api.get("/domains/search", { 
+        params,
+        signal: controller.signal 
+      });
+      
+      clearTimeout(timeoutId);
+      
+      const data = response.data.success ? response.data.data : response.data;
+      console.log(`✅ Domain search API response:`, data);
+      
+      return data;
     } catch (error) {
+      console.error("❌ Domain search API error:", error.message);
+      
+      if (error.name === 'AbortError' || error.message.includes('timeout')) {
+        console.warn("⏰ Domain search timed out, returning limited results");
+        // Return partial results instead of full mock data
+        const extensionArray = extensions.length > 0 ? extensions : [".com", ".net", ".org"];
+        const results = extensionArray.slice(0, 3).map((ext) => ({
+          domain: `${q}${ext}`,
+          available: true, // Assume available for timeout cases
+          price: ext === '.com' ? 12.99 : ext === '.net' ? 13.99 : 14.99,
+          currency: "USD",
+          isPremium: false,
+          message: "Check availability - service was slow to respond",
+          timeout: true
+        }));
+        
+        return {
+          query: q,
+          results: results
+        };
+      }
+      
       console.warn("API not available, returning mock data");
-      // Mock data for demonstration
-      const extensionArray =
-        extensions.length > 0
-          ? extensions
-          : [".com", ".net", ".org", ".io", ".co", ".ai", ".app"];
-      const directMatches = extensionArray.map((ext) => ({
+      // Reduced mock data for better performance
+      const extensionArray = extensions.length > 0 ? extensions : [".com", ".net", ".org"];
+      const directMatches = extensionArray.slice(0, 5).map((ext) => ({
         domain: `${q}${ext}`,
         available: Math.random() > 0.5,
-        price: Math.floor(Math.random() * 50) + 10,
+        price: Math.floor(Math.random() * 30) + 10,
         premium: Math.random() > 0.8,
         registrar: "Namecheap",
         description: `Perfect domain for your ${q} business`,
       }));
+      
       const aiSuggestions = [
         {
-          domain: `${q}-ai.com`,
-          brandabilityScore: 9,
-          reasoning: `AI thinks ${q}-ai.com is catchy and modern.`,
+          domain: `${q}-hub.com`,
+          brandabilityScore: 8,
+          reasoning: `${q}-hub.com sounds professional and modern.`,
         },
         {
-          domain: `${q}-hub.io`,
+          domain: `get${q}.io`,
           brandabilityScore: 7,
-          reasoning: `Great for a tech startup or platform.`,
+          reasoning: `Great for a tech startup or app.`,
         },
         {
-          domain: `${q}-pro.net`,
+          domain: `${q}pro.net`,
           brandabilityScore: 8,
           reasoning: `Professional and trustworthy domain name.`,
         },
       ];
+      
       return {
         directMatches,
         aiSuggestions,

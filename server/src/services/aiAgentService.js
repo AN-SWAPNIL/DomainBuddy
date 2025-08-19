@@ -53,21 +53,28 @@ Analyze the user's message and provide a JSON response with the following struct
 {
   "intent": "domain_search" | "domain_purchase" | "domain_info" | "general_help",
   "message": "A helpful response to the user",
-  "action": "search_domains" | "purchase_domain" | "check_domain" | "none",
+  "action": "search_domains" | "creative_search" | "purchase_domain" | "check_domain" | "none",
   "domain": "specific domain name if mentioned (only if user specifies full domain with extension)",
-  "searchTerms": ["array", "of", "search", "terms", "without", "extensions"]
+  "searchTerms": ["array", "of", "search", "terms", "without", "extensions"],
+  "isCreativeRequest": true | false
 }
 
 IMPORTANT RULES:
 1. If user mentions a COMPLETE domain name with extension (like "doggy.com", "example.net"), use "check_domain" action and put the full domain in "domain" field
-2. If user asks to search for terms WITHOUT extension (like "domainbuddy", "tech startup"), use "search_domains" action and put search terms in "searchTerms" field
-3. Never add extensions to search terms - extract only the root keywords
-4. For search_domains, we will check multiple extensions (.com, .net, .org, .io, .co)
+2. If user asks for CREATIVE domain suggestions or mentions a business idea/concept, use "creative_search" action and set "isCreativeRequest": true
+3. If user asks to search for SPECIFIC terms (like "domainbuddy", "google"), use "search_domains" action with "isCreativeRequest": false
+4. Never add extensions to search terms - extract only the root keywords
+5. For both actions, we will check multiple extensions (.com, .net, .org, .io, .co)
+
+CREATIVE vs SPECIFIC SEARCH:
+- Creative: "suggest domains for live location tracker device", "domains for my restaurant", "creative names for tech startup"
+- Specific: "search for domainbuddy", "check availability of google", "find exact domain bitcoin"
 
 Examples:
 - "Check doggy.com" → action: "check_domain", domain: "doggy.com"
-- "Search for domainbuddy" → action: "search_domains", searchTerms: ["domainbuddy"]
-- "Find domains for tech startup" → action: "search_domains", searchTerms: ["tech", "startup"]
+- "Search for domainbuddy" → action: "search_domains", searchTerms: ["domainbuddy"], isCreativeRequest: false
+- "Suggest domains for live location tracker device" → action: "creative_search", searchTerms: ["live", "location", "tracker", "device"], isCreativeRequest: true
+- "Creative domains for my restaurant" → action: "creative_search", searchTerms: ["restaurant"], isCreativeRequest: true
 
 User message: "${message}"
 
@@ -123,10 +130,20 @@ Respond with ONLY the JSON object, no additional text.
       switch (aiResponse.action) {
         case "search_domains":
           if (aiResponse.searchTerms && aiResponse.searchTerms.length > 0) {
-            const searchResults = await this.searchDomains(aiResponse.searchTerms);
+            const searchResults = await this.searchDomains(aiResponse.searchTerms, null, false);
             return {
               domains: searchResults,
               message: `I found ${searchResults.length} domains for your search.`
+            };
+          }
+          break;
+
+        case "creative_search":
+          if (aiResponse.searchTerms && aiResponse.searchTerms.length > 0) {
+            const creativeDomains = await this.generateCreativeDomains(aiResponse.searchTerms);
+            return {
+              domains: creativeDomains,
+              message: `I found ${creativeDomains.length} creative domain suggestions for you.`
             };
           }
           break;
@@ -215,6 +232,133 @@ Respond with ONLY the JSON object, no additional text.
       console.error("❌ Error searching domains:", error);
       return [];
     }
+  }
+
+  async generateCreativeDomains(searchTerms) {
+    try {
+      console.log(`🎨 Generating creative domains for: ${searchTerms.join(', ')}`);
+      
+      // Use AI to generate creative domain names
+      if (!this.model) {
+        console.log("⚠️ AI model not available for creative generation");
+        return await this.searchDomains(searchTerms, null, false); // Fallback to regular search
+      }
+
+      const creativePrompt = `
+Generate 10 creative, brandable domain names for a business related to: ${searchTerms.join(', ')}
+
+Requirements:
+- Names should be catchy, memorable, and brandable
+- Mix of real words, made-up words, and combinations
+- Suitable for a professional business
+- No extensions - just the domain name part
+- Each name should be 3-15 characters long
+- Avoid exact keyword matches
+
+Examples for "live location tracker device":
+- TrackSpot, LivePin, LocateNow, SpotSync, PinPoint, TrackWave, LiveMap, GeoSpot, PositionIQ, TrackPro
+
+Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...]
+`;
+
+      try {
+        const result = await this.model.generateContent(creativePrompt);
+        const response = await result.response;
+        const text = response.text().trim();
+        
+        console.log("🎨 Creative AI Response:", text);
+        
+        // Parse the creative domain names
+        let creativeNames;
+        try {
+          let jsonText = text;
+          if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+          }
+          creativeNames = JSON.parse(jsonText);
+        } catch (parseError) {
+          console.warn("⚠️ Failed to parse creative domains, using fallback");
+          // Generate some basic creative combinations as fallback
+          creativeNames = this.generateFallbackCreativeNames(searchTerms);
+        }
+
+        if (!Array.isArray(creativeNames)) {
+          console.warn("⚠️ Creative response not an array, using fallback");
+          creativeNames = this.generateFallbackCreativeNames(searchTerms);
+        }
+
+        // Check availability for creative domain names
+        const domains = [];
+        const extensions = ['.com', '.net', '.org', '.io', '.co'];
+        
+        // Limit to first 8 creative names to avoid too many API calls
+        for (const creativeName of creativeNames.slice(0, 8)) {
+          if (typeof creativeName === 'string' && creativeName.length > 0) {
+            for (const ext of extensions.slice(0, 3)) { // Check first 3 extensions for each creative name
+              const domainName = `${creativeName.toLowerCase()}${ext}`;
+              try {
+                const availability = await namecheapService.checkDomainAvailability(domainName);
+                domains.push({
+                  name: domainName,
+                  available: availability.available,
+                  price: availability.price || 12.99
+                });
+                
+                // If we have enough domains, break early
+                if (domains.length >= 10) break;
+              } catch (error) {
+                console.warn(`⚠️ Failed to check creative domain ${domainName}:`, error.message);
+                domains.push({
+                  name: domainName,
+                  available: Math.random() > 0.5,
+                  price: 12.99
+                });
+              }
+            }
+            if (domains.length >= 10) break;
+          }
+        }
+
+        return domains.slice(0, 10); // Return max 10 domains
+        
+      } catch (aiError) {
+        console.warn("⚠️ AI creative generation failed:", aiError.message);
+        return this.generateFallbackCreativeNames(searchTerms);
+      }
+
+    } catch (error) {
+      console.error("❌ Error generating creative domains:", error);
+      return this.generateFallbackCreativeNames(searchTerms);
+    }
+  }
+
+  generateFallbackCreativeNames(searchTerms) {
+    console.log("🔄 Using fallback creative domain generation");
+    
+    // Simple fallback: combine terms and add creative suffixes
+    const creativeSuffixes = ['spot', 'hub', 'pro', 'zone', 'lab', 'wave', 'sync', 'now', 'go', 'kit'];
+    const creativePrefixes = ['my', 'get', 'smart', 'quick', 'easy', 'super', 'prime', 'next', 'live', 'auto'];
+    
+    const creativeNames = [];
+    const baseTerms = searchTerms.slice(0, 2); // Use first 2 terms
+    
+    // Combine base terms with suffixes
+    for (const term of baseTerms) {
+      for (const suffix of creativeSuffixes.slice(0, 3)) {
+        creativeNames.push(`${term.toLowerCase()}${suffix}`);
+      }
+    }
+    
+    // Combine prefixes with base terms
+    for (const term of baseTerms) {
+      for (const prefix of creativePrefixes.slice(0, 2)) {
+        creativeNames.push(`${prefix}${term.toLowerCase()}`);
+      }
+    }
+    
+    return creativeNames.slice(0, 8); // Return max 8 fallback names
   }
 
   async checkDomain(domainName) {

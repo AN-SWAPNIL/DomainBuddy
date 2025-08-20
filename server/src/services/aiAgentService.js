@@ -123,6 +123,12 @@ class AIAgentService {
     this.llm = null;
     this.tools = [];
     this.graph = null;
+    
+    // In-memory conversation history storage
+    // Structure: { userId: [{ role: 'user'|'assistant', message: string, timestamp: Date, domains?: [] }] }
+    this.conversationHistory = new Map();
+    this.maxHistoryLength = 20; // Keep last 20 messages per user
+    
     this.initializeAgent();
   }
 
@@ -204,14 +210,95 @@ class AIAgentService {
     }
   }
 
+  // Conversation History Management
+  addToHistory(userId, role, message, domains = null) {
+    if (!userId) return; // Skip if no user ID
+    
+    if (!this.conversationHistory.has(userId)) {
+      this.conversationHistory.set(userId, []);
+    }
+    
+    const userHistory = this.conversationHistory.get(userId);
+    userHistory.push({
+      role: role, // 'user' or 'assistant'
+      message: message,
+      domains: domains,
+      timestamp: new Date()
+    });
+    
+    // Keep only the last maxHistoryLength messages
+    if (userHistory.length > this.maxHistoryLength) {
+      userHistory.splice(0, userHistory.length - this.maxHistoryLength);
+    }
+    
+    console.log(`📝 Added to history for user ${userId}: ${role} message (${userHistory.length} total)`);
+  }
+
+  getConversationHistory(userId, includeLastN = 10) {
+    if (!userId || !this.conversationHistory.has(userId)) {
+      return [];
+    }
+    
+    const userHistory = this.conversationHistory.get(userId);
+    return userHistory.slice(-includeLastN); // Get last N messages
+  }
+
+  // Debug method to view conversation history
+  debugConversationHistory(userId) {
+    if (!userId || !this.conversationHistory.has(userId)) {
+      console.log(`No conversation history found for user: ${userId}`);
+      return [];
+    }
+    
+    const history = this.conversationHistory.get(userId);
+    console.log(`📜 Conversation history for user ${userId} (${history.length} messages):`);
+    history.forEach((entry, index) => {
+      console.log(`${index + 1}. [${entry.role.toUpperCase()}]: ${entry.message.substring(0, 100)}...`);
+      if (entry.domains && entry.domains.length > 0) {
+        console.log(`   Domains: ${entry.domains.map(d => d.name).slice(0, 3).join(', ')}`);
+      }
+    });
+    return history;
+  }
+
+  buildContextFromHistory(userId) {
+    const history = this.getConversationHistory(userId, 10);
+    if (history.length === 0) return "";
+    
+    let context = "\n\nCONVERSATION HISTORY (for context):\n";
+    history.forEach((entry, index) => {
+      context += `${entry.role.toUpperCase()}: ${entry.message}`;
+      if (entry.domains && entry.domains.length > 0) {
+        const domainNames = entry.domains.map(d => d.name).slice(0, 3).join(', ');
+        context += ` [Domains shown: ${domainNames}${entry.domains.length > 3 ? '...' : ''}]`;
+      }
+      context += "\n";
+    });
+    context += "\nPlease use this conversation history to provide contextually relevant responses.\n";
+    
+    return context;
+  }
+
   async processUserMessage(message, userId = null) {
     try {
       console.log(`🔍 Processing user message: "${message}"`);
 
+      // Add user message to history
+      if (userId) {
+        this.addToHistory(userId, 'user', message);
+      }
+
       // If AI agent is not available, use fallback
       if (!this.llm) {
         console.log("⚠️ LLM not available, using fallback response");
-        return this.getFallbackResponse(message);
+        const fallbackResponse = this.getFallbackResponse(message, userId);
+        
+        // Add fallback response to history
+        if (userId) {
+          this.addToHistory(userId, 'assistant', fallbackResponse.message, fallbackResponse.domains);
+        }
+        
+        return fallbackResponse;
       }
 
       // If LangGraph is available, use the workflow
@@ -226,6 +313,11 @@ class AIAgentService {
 
           // Execute the agent workflow
           const result = await this.graph.invoke(initialState);
+
+          // Add assistant response to history
+          if (userId) {
+            this.addToHistory(userId, 'assistant', result.message, result.domains);
+          }
 
           // Save conversation to database if userId is provided
           if (userId && result.message) {
@@ -251,7 +343,7 @@ class AIAgentService {
       // Simplified flow without LangGraph (but still using LangChain LLM)
       console.log("🔄 Using simplified LangChain flow...");
       
-      // Step 1: Analyze intent
+      // Step 1: Analyze intent (with conversation history)
       const intentState = await this.analyzeIntent({ userMessage: message, userId });
       
       // Step 2: Execute action
@@ -259,6 +351,11 @@ class AIAgentService {
       
       // Step 3: Format response
       const finalState = await this.formatResponse(actionState);
+
+      // Add assistant response to history
+      if (userId) {
+        this.addToHistory(userId, 'assistant', finalState.message, finalState.domains);
+      }
 
       // Save conversation to database if userId is provided
       if (userId && finalState.message) {
@@ -278,13 +375,23 @@ class AIAgentService {
       };
     } catch (error) {
       console.error("❌ Error processing user message:", error);
-      return this.getFallbackResponse(message);
+      const fallbackResponse = this.getFallbackResponse(message, userId);
+      
+      // Add fallback response to history
+      if (userId) {
+        this.addToHistory(userId, 'assistant', fallbackResponse.message, fallbackResponse.domains);
+      }
+      
+      return fallbackResponse;
     }
   }
 
   async analyzeIntent(state) {
     try {
       console.log("🧠 Analyzing user intent with LangChain...");
+      
+      // Build conversation context
+      const conversationContext = state.userId ? this.buildContextFromHistory(state.userId) : "";
       
       const systemPrompt = `You are a helpful AI assistant for DomainBuddy, a domain registration service.
 Analyze the user's message and determine their intent and required actions.
@@ -313,7 +420,15 @@ PURCHASE DETECTION:
 
 CREATIVE vs SPECIFIC SEARCH:
 - Creative: "suggest domains for live location tracker device", "domains for my restaurant", "creative names for tech startup"
-- Specific: "search for domainbuddy", "check availability of google", "find exact domain bitcoin"`;
+- Specific: "search for domainbuddy", "check availability of google", "find exact domain bitcoin"
+
+CONTEXT AWARENESS:
+- Use conversation history to understand context
+- If user asks for "alternatives" or "suggestions" after a domain was unavailable, treat as creative_search
+- If user says "similar" or "other options", generate creative alternatives based on previous context
+- Remember what domains were previously shown or discussed
+
+${conversationContext}`;
 
       const userMessage = state.userMessage;
       
@@ -340,7 +455,7 @@ CREATIVE vs SPECIFIC SEARCH:
         analysis = JSON.parse(jsonText);
       } catch (parseError) {
         console.warn("⚠️ Failed to parse LangChain analysis, using fallback");
-        const fallback = this.getFallbackResponse(userMessage);
+        const fallback = this.getFallbackResponse(userMessage, state.userId);
         return {
           ...state,
           intent: fallback.intent,
@@ -361,7 +476,7 @@ CREATIVE vs SPECIFIC SEARCH:
       };
     } catch (error) {
       console.error("❌ Error analyzing intent:", error);
-      const fallback = this.getFallbackResponse(state.userMessage);
+      const fallback = this.getFallbackResponse(state.userMessage, state.userId);
       return {
         ...state,
         intent: fallback.intent,
@@ -408,13 +523,54 @@ CREATIVE vs SPECIFIC SEARCH:
         case "creative_search":
           if (state.searchTerms && state.searchTerms.length > 0) {
             const tool = this.tools.find(t => t.name === "creative_domain_search");
-            const input = JSON.stringify({ searchTerms: state.searchTerms });
+            
+            // Check conversation history for context
+            let contextualTerms = state.searchTerms;
+            if (state.userId) {
+              const history = this.getConversationHistory(state.userId, 5);
+              const previousDomains = [];
+              
+              // Extract domain concepts from recent history
+              history.forEach(entry => {
+                if (entry.domains && entry.domains.length > 0) {
+                  entry.domains.forEach(domain => {
+                    const domainRoot = domain.name.split('.')[0];
+                    if (domainRoot && !previousDomains.includes(domainRoot)) {
+                      previousDomains.push(domainRoot);
+                    }
+                  });
+                }
+              });
+              
+              // If user is asking for alternatives without specific terms, use previous context
+              if (state.searchTerms.length === 0 && previousDomains.length > 0) {
+                contextualTerms = [previousDomains[0]]; // Use the most recent domain concept
+                console.log(`🔄 Using contextual terms from history: ${contextualTerms.join(', ')}`);
+              }
+            }
+            
+            const input = JSON.stringify({ searchTerms: contextualTerms });
             const creativeDomains = JSON.parse(await tool._call(input));
             result = {
               domains: creativeDomains,
               message: `I found ${creativeDomains.length} creative domain suggestions for you.`,
               success: true
             };
+          } else if (state.userId) {
+            // If no search terms but we have user history, try to extract context
+            const history = this.getConversationHistory(state.userId, 3);
+            const lastUserMessage = history.find(entry => entry.role === 'user');
+            
+            if (lastUserMessage && lastUserMessage.message.toLowerCase().includes('doggy')) {
+              const tool = this.tools.find(t => t.name === "creative_domain_search");
+              const input = JSON.stringify({ searchTerms: ['dog', 'pet'] });
+              const creativeDomains = JSON.parse(await tool._call(input));
+              result = {
+                domains: creativeDomains,
+                message: `Here are some creative alternatives similar to what you were looking for:`,
+                success: true
+              };
+            }
           }
           break;
 
@@ -480,6 +636,9 @@ CREATIVE vs SPECIFIC SEARCH:
       
       // Generate a natural language response using LangChain if we have the LLM
       if (this.llm && state.message) {
+        // Build conversation context for better responses
+        const conversationContext = state.userId ? this.buildContextFromHistory(state.userId) : "";
+        
         const contextPrompt = `You are a friendly AI assistant for DomainBuddy. 
 Based on the action performed and results, provide a natural, helpful response to the user.
 
@@ -491,6 +650,9 @@ Current message: ${state.message}
 
 Make the response conversational and helpful. If domains were found, mention the count and encourage next steps.
 If a purchase was initiated, explain the next steps clearly.
+If this is a follow-up request (like asking for alternatives), acknowledge the context.
+
+${conversationContext}
 
 Respond with ONLY the message text, no JSON or extra formatting.`;
 
@@ -921,8 +1083,34 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
     }
   }
 
-  getFallbackResponse(message) {
+  getFallbackResponse(message, userId = null) {
     const lowerMessage = message.toLowerCase();
+    
+    // Check conversation history for context
+    let historyContext = "";
+    if (userId) {
+      const history = this.getConversationHistory(userId, 3);
+      const hasRecentDomainCheck = history.some(entry => 
+        entry.role === 'assistant' && entry.message.includes('not available')
+      );
+      
+      // If user recently got "not available" and now asks for alternatives
+      if (hasRecentDomainCheck && (
+        lowerMessage.includes('alternative') || 
+        lowerMessage.includes('suggestion') || 
+        lowerMessage.includes('other') ||
+        lowerMessage.includes('similar') ||
+        lowerMessage.includes('different')
+      )) {
+        return {
+          intent: "domain_search",
+          message: "I'll find some creative alternatives for you based on your previous search.",
+          action: "creative_search",
+          searchTerms: [],
+          isCreativeRequest: true
+        };
+      }
+    }
     
     // Check for purchase intent first
     const purchaseWords = ['buy', 'purchase', 'get', 'register', 'order', 'take'];

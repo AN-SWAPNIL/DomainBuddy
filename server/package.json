@@ -19,6 +19,9 @@
   "license": "ISC",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@langchain/core": "^0.3.72",
+    "@langchain/google-genai": "^0.2.16",
+    "@langchain/langgraph": "^0.4.6",
     "@supabase/supabase-js": "^2.39.1",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",

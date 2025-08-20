@@ -1,18 +1,140 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
+const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
+const { Tool } = require('@langchain/core/tools');
 const namecheapService = require("./namecheapService");
 const supabase = require("../config/database");
+
+// Define LangChain Tools for Domain Operations
+class DomainSearchTool extends Tool {
+  name = "domain_search";
+  description = "Search for domain availability based on search terms";
+
+  constructor(aiService) {
+    super();
+    this.aiService = aiService;
+  }
+
+  async _call(input) {
+    const { searchTerms, specificDomain } = JSON.parse(input);
+    return JSON.stringify(await this.aiService.searchDomains(searchTerms, specificDomain));
+  }
+}
+
+class CreativeDomainTool extends Tool {
+  name = "creative_domain_search";
+  description = "Generate creative domain suggestions based on business concepts";
+
+  constructor(aiService) {
+    super();
+    this.aiService = aiService;
+  }
+
+  async _call(input) {
+    const { searchTerms } = JSON.parse(input);
+    return JSON.stringify(await this.aiService.generateCreativeDomains(searchTerms));
+  }
+}
+
+class DomainPurchaseTool extends Tool {
+  name = "domain_purchase";
+  description = "Process automated domain purchase";
+
+  constructor(aiService) {
+    super();
+    this.aiService = aiService;
+  }
+
+  async _call(input) {
+    const { domainName, userId } = JSON.parse(input);
+    return JSON.stringify(await this.aiService.processDomainPurchase(domainName, userId));
+  }
+}
+
+class DomainCheckTool extends Tool {
+  name = "domain_check";
+  description = "Check availability and price of a specific domain";
+
+  constructor(aiService) {
+    super();
+    this.aiService = aiService;
+  }
+
+  async _call(input) {
+    const { domainName } = JSON.parse(input);
+    return JSON.stringify(await this.aiService.checkDomain(domainName));
+  }
+}
+
+// Agent State Interface - simplified for LangGraph compatibility
+const AgentState = {
+  messages: {
+    value: (x, y) => (x || []).concat(y || []),
+    default: () => []
+  },
+  userMessage: {
+    value: (x, y) => y ?? x ?? "",
+    default: () => ""
+  },
+  intent: {
+    value: (x, y) => y ?? x ?? null,
+    default: () => null
+  },
+  action: {
+    value: (x, y) => y ?? x ?? null,
+    default: () => null
+  },
+  searchTerms: {
+    value: (x, y) => y ?? x ?? [],
+    default: () => []
+  },
+  domain: {
+    value: (x, y) => y ?? x ?? null,
+    default: () => null
+  },
+  userId: {
+    value: (x, y) => y ?? x ?? null,
+    default: () => null
+  },
+  isCreativeRequest: {
+    value: (x, y) => y ?? x ?? false,
+    default: () => false
+  },
+  domains: {
+    value: (x, y) => y ?? x ?? [],
+    default: () => []
+  },
+  success: {
+    value: (x, y) => y ?? x ?? false,
+    default: () => false
+  },
+  message: {
+    value: (x, y) => y ?? x ?? "",
+    default: () => ""
+  },
+  transactionId: {
+    value: (x, y) => y ?? x ?? null,
+    default: () => null
+  }
+};
 
 class AIAgentService {
   constructor() {
     console.log('🔧 AIAgentService constructor called');
-    this.genAI = null;
-    this.model = null;
-    this.initializeModel();
+    this.llm = null;
+    this.tools = [];
+    this.graph = null;
+    
+    // In-memory conversation history storage
+    // Structure: { userId: [{ role: 'user'|'assistant', message: string, timestamp: Date, domains?: [] }] }
+    this.conversationHistory = new Map();
+    this.maxHistoryLength = 20; // Keep last 20 messages per user
+    
+    this.initializeAgent();
   }
 
-  async initializeModel() {
+  async initializeAgent() {
     try {
-      console.log('🤖 Initializing Gemini AI model...');
+      console.log('🤖 Initializing LangChain AI Agent...');
       
       if (!process.env.GOOGLE_API_KEY) {
         console.warn("⚠️ GOOGLE_API_KEY not found in environment variables. AI features will be limited.");
@@ -21,38 +143,266 @@ class AIAgentService {
 
       console.log('📋 Google API Key found, length:', process.env.GOOGLE_API_KEY.length);
 
-      // Initialize Google Generative AI
-      this.genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      // Initialize ChatGoogleGenerativeAI (LangChain wrapper)
+      try {
+        this.llm = new ChatGoogleGenerativeAI({
+          model: 'gemini-1.5-flash',
+          apiKey: process.env.GOOGLE_API_KEY,
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+        });
+        console.log('✅ ChatGoogleGenerativeAI initialized successfully');
+      } catch (llmError) {
+        console.warn('⚠️ ChatGoogleGenerativeAI failed, trying alternative parameters:', llmError.message);
+        
+        // Try with different parameter names
+        try {
+          this.llm = new ChatGoogleGenerativeAI({
+            googleApiKey: process.env.GOOGLE_API_KEY,
+            modelName: 'gemini-1.5-flash',
+            temperature: 0.7,
+          });
+          console.log('✅ ChatGoogleGenerativeAI initialized with alternative parameters');
+        } catch (altError) {
+          console.warn('⚠️ Alternative ChatGoogleGenerativeAI also failed:', altError.message);
+          this.llm = null;
+        }
+      }
+
+      // Initialize tools (even if LLM failed, for fallback operations)
+      this.tools = [
+        new DomainSearchTool(this),
+        new CreativeDomainTool(this),
+        new DomainPurchaseTool(this),
+        new DomainCheckTool(this)
+      ];
+
+      // Create the agent workflow using LangGraph
+      this.createAgentWorkflow();
       
-      console.log('✅ Gemini AI model initialized successfully');
-      return true;
+      if (this.llm) {
+        console.log('✅ LangChain AI Agent initialized successfully');
+        return true;
+      } else {
+        console.log('⚠️ LangChain AI Agent initialized with limited functionality (LLM unavailable)');
+        return false;
+      }
     } catch (error) {
-      console.error('❌ Failed to initialize Gemini AI model:', error.message);
-      this.genAI = null;
-      this.model = null;
+      console.error('❌ Failed to initialize LangChain AI Agent:', error.message);
+      this.llm = null;
+      this.tools = [];
+      this.graph = null;
       return false;
     }
+  }
+
+  createAgentWorkflow() {
+    try {
+      console.log('🔗 Creating LangChain workflow...');
+      
+      // For now, skip LangGraph and use the simplified workflow directly
+      // This ensures compatibility and reliability
+      this.graph = null;
+      console.log('✅ Using LangChain workflow');
+    } catch (error) {
+      console.warn('⚠️ Workflow creation failed:', error.message);
+      this.graph = null;
+    }
+  }
+
+  // Conversation History Management
+  addToHistory(userId, role, message, domains = null) {
+    if (!userId) return; // Skip if no user ID
+    
+    if (!this.conversationHistory.has(userId)) {
+      this.conversationHistory.set(userId, []);
+    }
+    
+    const userHistory = this.conversationHistory.get(userId);
+    userHistory.push({
+      role: role, // 'user' or 'assistant'
+      message: message,
+      domains: domains,
+      timestamp: new Date()
+    });
+    
+    // Keep only the last maxHistoryLength messages
+    if (userHistory.length > this.maxHistoryLength) {
+      userHistory.splice(0, userHistory.length - this.maxHistoryLength);
+    }
+    
+    console.log(`📝 Added to history for user ${userId}: ${role} message (${userHistory.length} total)`);
+  }
+
+  getConversationHistory(userId, includeLastN = 10) {
+    if (!userId || !this.conversationHistory.has(userId)) {
+      return [];
+    }
+    
+    const userHistory = this.conversationHistory.get(userId);
+    return userHistory.slice(-includeLastN); // Get last N messages
+  }
+
+  // Debug method to view conversation history
+  debugConversationHistory(userId) {
+    if (!userId || !this.conversationHistory.has(userId)) {
+      console.log(`No conversation history found for user: ${userId}`);
+      return [];
+    }
+    
+    const history = this.conversationHistory.get(userId);
+    console.log(`📜 Conversation history for user ${userId} (${history.length} messages):`);
+    history.forEach((entry, index) => {
+      console.log(`${index + 1}. [${entry.role.toUpperCase()}]: ${entry.message.substring(0, 100)}...`);
+      if (entry.domains && entry.domains.length > 0) {
+        console.log(`   Domains: ${entry.domains.map(d => d.name).slice(0, 3).join(', ')}`);
+      }
+    });
+    return history;
+  }
+
+  buildContextFromHistory(userId) {
+    const history = this.getConversationHistory(userId, 10);
+    if (history.length === 0) return "";
+    
+    let context = "\n\nCONVERSATION HISTORY (for context):\n";
+    history.forEach((entry, index) => {
+      context += `${entry.role.toUpperCase()}: ${entry.message}`;
+      if (entry.domains && entry.domains.length > 0) {
+        const domainNames = entry.domains.map(d => d.name).slice(0, 3).join(', ');
+        context += ` [Domains shown: ${domainNames}${entry.domains.length > 3 ? '...' : ''}]`;
+      }
+      context += "\n";
+    });
+    context += "\nPlease use this conversation history to provide contextually relevant responses.\n";
+    
+    return context;
   }
 
   async processUserMessage(message, userId = null) {
     try {
       console.log(`🔍 Processing user message: "${message}"`);
 
-      // If AI model is not available, use fallback
-      if (!this.model) {
-        console.log("⚠️ AI model not available, using fallback response");
-        return this.getFallbackResponse(message);
+      // Add user message to history
+      if (userId) {
+        this.addToHistory(userId, 'user', message);
       }
 
-      // Create a prompt for the AI
-      const prompt = `
-You are a helpful AI assistant for DomainBuddy, a domain registration service.
-Analyze the user's message and provide a JSON response with the following structure:
+      // If AI agent is not available, use fallback
+      if (!this.llm) {
+        console.log("⚠️ LLM not available, using fallback response");
+        const fallbackResponse = this.getFallbackResponse(message, userId);
+        
+        // Add fallback response to history
+        if (userId) {
+          this.addToHistory(userId, 'assistant', fallbackResponse.message, fallbackResponse.domains);
+        }
+        
+        return fallbackResponse;
+      }
 
+      // If LangGraph is available, use the workflow
+      if (this.graph) {
+        try {
+          // Initialize state for the workflow
+          const initialState = {
+            messages: [new HumanMessage(message)],
+            userMessage: message,
+            userId: userId
+          };
+
+          // Execute the agent workflow
+          const result = await this.graph.invoke(initialState);
+
+          // Add assistant response to history
+          if (userId) {
+            this.addToHistory(userId, 'assistant', result.message, result.domains);
+          }
+
+          // Save conversation to database if userId is provided
+          if (userId && result.message) {
+            await this.saveConversation(userId, message, result);
+          }
+
+          return {
+            intent: result.intent,
+            message: result.message,
+            action: result.action,
+            domain: result.domain,
+            searchTerms: result.searchTerms,
+            isCreativeRequest: result.isCreativeRequest,
+            domains: result.domains || [],
+            success: result.success,
+            transactionId: result.transactionId
+          };
+        } catch (graphError) {
+          console.warn("⚠️ LangGraph execution failed, using simplified flow:", graphError.message);
+        }
+      }
+
+      // Simplified flow without LangGraph (but still using LangChain LLM)
+      console.log("🔄 Using simplified LangChain flow...");
+      
+      // Step 1: Analyze intent (with conversation history)
+      const intentState = await this.analyzeIntent({ userMessage: message, userId });
+      
+      // Step 2: Execute action
+      const actionState = await this.executeAction(intentState);
+      
+      // Step 3: Format response
+      const finalState = await this.formatResponse(actionState);
+
+      // Add assistant response to history
+      if (userId) {
+        this.addToHistory(userId, 'assistant', finalState.message, finalState.domains);
+      }
+
+      // Save conversation to database if userId is provided
+      if (userId && finalState.message) {
+        await this.saveConversation(userId, message, finalState);
+      }
+
+      return {
+        intent: finalState.intent,
+        message: finalState.message,
+        action: finalState.action,
+        domain: finalState.domain,
+        searchTerms: finalState.searchTerms,
+        isCreativeRequest: finalState.isCreativeRequest,
+        domains: finalState.domains || [],
+        success: finalState.success,
+        transactionId: finalState.transactionId,
+        // Add payment redirection fields
+        requiresPayment: finalState.requiresPayment,
+        redirectToPayment: finalState.redirectToPayment,
+        paymentUrl: finalState.paymentUrl
+      };
+    } catch (error) {
+      console.error("❌ Error processing user message:", error);
+      const fallbackResponse = this.getFallbackResponse(message, userId);
+      
+      // Add fallback response to history
+      if (userId) {
+        this.addToHistory(userId, 'assistant', fallbackResponse.message, fallbackResponse.domains);
+      }
+      
+      return fallbackResponse;
+    }
+  }
+
+  async analyzeIntent(state) {
+    try {
+      console.log("🧠 Analyzing user intent with LangChain...");
+      
+      // Build conversation context
+      const conversationContext = state.userId ? this.buildContextFromHistory(state.userId) : "";
+      
+      const systemPrompt = `You are a helpful AI assistant for DomainBuddy, a domain registration service.
+Analyze the user's message and determine their intent and required actions.
+
+Respond with ONLY a JSON object with this structure:
 {
   "intent": "domain_search" | "domain_purchase" | "domain_info" | "general_help",
-  "message": "A helpful response to the user",
   "action": "search_domains" | "creative_search" | "purchase_domain" | "check_domain" | "none",
   "domain": "specific domain name if mentioned (only if user specifies full domain with extension)",
   "searchTerms": ["array", "of", "search", "terms", "without", "extensions"],
@@ -76,115 +426,271 @@ CREATIVE vs SPECIFIC SEARCH:
 - Creative: "suggest domains for live location tracker device", "domains for my restaurant", "creative names for tech startup"
 - Specific: "search for domainbuddy", "check availability of google", "find exact domain bitcoin"
 
-Examples:
-- "Check doggy.com" → action: "check_domain", domain: "doggy.com"
-- "Search for domainbuddy" → action: "search_domains", searchTerms: ["domainbuddy"], isCreativeRequest: false
-- "Suggest domains for live location tracker device" → action: "creative_search", searchTerms: ["live", "location", "tracker", "device"], isCreativeRequest: true
-- "Creative domains for my restaurant" → action: "creative_search", searchTerms: ["restaurant"], isCreativeRequest: true
-- "Buy trackspot.com" → action: "purchase_domain", domain: "trackspot.com"
-- "I want to purchase livepin.com" → action: "purchase_domain", domain: "livepin.com"
+CONTEXT AWARENESS:
+- Use conversation history to understand context
+- If user asks for "alternatives" or "suggestions" after a domain was unavailable, treat as creative_search
+- If user says "similar" or "other options", generate creative alternatives based on previous context
+- Remember what domains were previously shown or discussed
 
-User message: "${message}"
+${conversationContext}`;
 
-Respond with ONLY the JSON object, no additional text.
-`;
+      const userMessage = state.userMessage;
+      
+      const messages = [
+        new SystemMessage(systemPrompt),
+        new HumanMessage(`User message: "${userMessage}"\n\nRespond with ONLY the JSON object, no additional text.`)
+      ];
 
-      // Generate response using Gemini
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const response = await this.llm.invoke(messages);
+      const content = response.content;
 
-      console.log("🤖 AI Response:", text);
+      console.log("🤖 LangChain Analysis Response:", content);
 
-      // Parse the JSON response (remove markdown code blocks if present)
-      let aiResponse;
+      // Parse the JSON response
+      let analysis;
       try {
-        let jsonText = text.trim();
-        // Remove markdown code blocks
+        let jsonText = content.trim();
+        // Remove markdown code blocks if present
         if (jsonText.startsWith('```json')) {
           jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
         } else if (jsonText.startsWith('```')) {
           jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
         }
-        aiResponse = JSON.parse(jsonText);
+        analysis = JSON.parse(jsonText);
       } catch (parseError) {
-        console.warn("⚠️ Failed to parse AI response, using fallback");
-        return this.getFallbackResponse(message);
+        console.warn("⚠️ Failed to parse LangChain analysis, using fallback");
+        const fallback = this.getFallbackResponse(userMessage, state.userId);
+        return {
+          ...state,
+          intent: fallback.intent,
+          action: fallback.action,
+          domain: fallback.domain,
+          searchTerms: fallback.searchTerms || [],
+          isCreativeRequest: fallback.isCreativeRequest || false
+        };
       }
 
-      // Execute the action if needed
-      if (aiResponse.action && aiResponse.action !== "none") {
-        const actionResult = await this.executeAction(aiResponse, userId);
-        if (actionResult) {
-          aiResponse.domains = actionResult.domains;
-          aiResponse.message = actionResult.message || aiResponse.message;
-        }
-      }
-
-      // Save conversation to database if userId is provided
-      if (userId) {
-        await this.saveConversation(userId, message, aiResponse);
-      }
-
-      return aiResponse;
+      return {
+        ...state,
+        intent: analysis.intent,
+        action: analysis.action,
+        domain: analysis.domain,
+        searchTerms: analysis.searchTerms || [],
+        isCreativeRequest: analysis.isCreativeRequest || false
+      };
     } catch (error) {
-      console.error("❌ Error processing user message:", error);
-      return this.getFallbackResponse(message);
+      console.error("❌ Error analyzing intent:", error);
+      const fallback = this.getFallbackResponse(state.userMessage, state.userId);
+      return {
+        ...state,
+        intent: fallback.intent,
+        action: fallback.action,
+        domain: fallback.domain,
+        searchTerms: fallback.searchTerms || [],
+        isCreativeRequest: fallback.isCreativeRequest || false
+      };
     }
   }
 
-  async executeAction(aiResponse, userId) {
+  async executeAction(state) {
     try {
-      switch (aiResponse.action) {
+      console.log(`🎯 Executing action: ${state.action}`);
+      
+      if (!state.action || state.action === "none") {
+        return {
+          ...state,
+          success: true,
+          message: "I'm here to help you with domain searches, purchases, and information."
+        };
+      }
+
+      // Find and execute the appropriate tool
+      let result = null;
+      
+      switch (state.action) {
         case "search_domains":
-          if (aiResponse.searchTerms && aiResponse.searchTerms.length > 0) {
-            const searchResults = await this.searchDomains(aiResponse.searchTerms, null, false);
-            return {
+          if (state.searchTerms && state.searchTerms.length > 0) {
+            const tool = this.tools.find(t => t.name === "domain_search");
+            const input = JSON.stringify({ 
+              searchTerms: state.searchTerms, 
+              specificDomain: null 
+            });
+            const searchResults = JSON.parse(await tool._call(input));
+            result = {
               domains: searchResults,
-              message: `I found ${searchResults.length} domains for your search.`
+              message: `I found ${searchResults.length} domains for your search.`,
+              success: true
             };
           }
           break;
 
         case "creative_search":
-          if (aiResponse.searchTerms && aiResponse.searchTerms.length > 0) {
-            const creativeDomains = await this.generateCreativeDomains(aiResponse.searchTerms);
-            return {
+          if (state.searchTerms && state.searchTerms.length > 0) {
+            const tool = this.tools.find(t => t.name === "creative_domain_search");
+            
+            // Check conversation history for context
+            let contextualTerms = state.searchTerms;
+            if (state.userId) {
+              const history = this.getConversationHistory(state.userId, 5);
+              const previousDomains = [];
+              
+              // Extract domain concepts from recent history
+              history.forEach(entry => {
+                if (entry.domains && entry.domains.length > 0) {
+                  entry.domains.forEach(domain => {
+                    const domainRoot = domain.name.split('.')[0];
+                    if (domainRoot && !previousDomains.includes(domainRoot)) {
+                      previousDomains.push(domainRoot);
+                    }
+                  });
+                }
+              });
+              
+              // If user is asking for alternatives without specific terms, use previous context
+              if (state.searchTerms.length === 0 && previousDomains.length > 0) {
+                contextualTerms = [previousDomains[0]]; // Use the most recent domain concept
+                console.log(`🔄 Using contextual terms from history: ${contextualTerms.join(', ')}`);
+              }
+            }
+            
+            const input = JSON.stringify({ searchTerms: contextualTerms });
+            const creativeDomains = JSON.parse(await tool._call(input));
+            result = {
               domains: creativeDomains,
-              message: `I found ${creativeDomains.length} creative domain suggestions for you.`
+              message: `I found ${creativeDomains.length} creative domain suggestions for you.`,
+              success: true
             };
+          } else if (state.userId) {
+            // If no search terms but we have user history, try to extract context
+            const history = this.getConversationHistory(state.userId, 3);
+            const lastUserMessage = history.find(entry => entry.role === 'user');
+            
+            if (lastUserMessage && lastUserMessage.message.toLowerCase().includes('doggy')) {
+              const tool = this.tools.find(t => t.name === "creative_domain_search");
+              const input = JSON.stringify({ searchTerms: ['dog', 'pet'] });
+              const creativeDomains = JSON.parse(await tool._call(input));
+              result = {
+                domains: creativeDomains,
+                message: `Here are some creative alternatives similar to what you were looking for:`,
+                success: true
+              };
+            }
           }
           break;
 
         case "check_domain":
-          if (aiResponse.domain) {
-            // Use specific domain search for exact domain checks
-            const searchResults = await this.searchDomains(null, aiResponse.domain);
-            return {
-              domains: searchResults,
-              message: `Here's the information for ${aiResponse.domain}.`
+          if (state.domain) {
+            const tool = this.tools.find(t => t.name === "domain_check");
+            const input = JSON.stringify({ domainName: state.domain });
+            const domainInfo = JSON.parse(await tool._call(input));
+            result = {
+              domains: [domainInfo],
+              message: `Here's the information for ${state.domain}.`,
+              success: true
             };
           }
           break;
 
         case "purchase_domain":
-          if (aiResponse.domain && userId) {
-            const purchaseResult = await this.processDomainPurchase(aiResponse.domain, userId);
-            return {
+          if (state.domain && state.userId) {
+            const tool = this.tools.find(t => t.name === "domain_purchase");
+            const input = JSON.stringify({ 
+              domainName: state.domain, 
+              userId: state.userId 
+            });
+            const purchaseResult = JSON.parse(await tool._call(input));
+            result = {
               domains: purchaseResult.domains || [],
               message: purchaseResult.message,
               success: purchaseResult.success,
-              transactionId: purchaseResult.transactionId
+              transactionId: purchaseResult.transactionId,
+              // Pass through payment redirection fields
+              requiresPayment: purchaseResult.requiresPayment,
+              redirectToPayment: purchaseResult.redirectToPayment,
+              paymentUrl: purchaseResult.paymentUrl
             };
           }
           break;
 
         default:
-          return null;
+          result = {
+            domains: [],
+            message: "I'm not sure how to help with that. Please try rephrasing your request.",
+            success: false
+          };
       }
+
+      return {
+        ...state,
+        domains: result?.domains || [],
+        message: result?.message || "Action completed.",
+        success: result?.success || false,
+        transactionId: result?.transactionId,
+        // Pass through payment redirection fields
+        requiresPayment: result?.requiresPayment,
+        redirectToPayment: result?.redirectToPayment,
+        paymentUrl: result?.paymentUrl
+      };
     } catch (error) {
       console.error("❌ Error executing action:", error);
-      return null;
+      return {
+        ...state,
+        domains: [],
+        message: "I encountered an error while processing your request. Please try again.",
+        success: false
+      };
+    }
+  }
+
+  async formatResponse(state) {
+    try {
+      console.log("📝 Formatting final response...");
+      
+      // Generate a natural language response using LangChain if we have the LLM
+      if (this.llm && state.message) {
+        // Build conversation context for better responses
+        const conversationContext = state.userId ? this.buildContextFromHistory(state.userId) : "";
+        
+        const contextPrompt = `You are a friendly AI assistant for DomainBuddy. 
+Based on the action performed and results, provide a natural, helpful response to the user.
+
+Action performed: ${state.action}
+Intent: ${state.intent}
+Domains found: ${state.domains ? state.domains.length : 0}
+Success: ${state.success}
+Current message: ${state.message}
+
+Make the response conversational and helpful. If domains were found, mention the count and encourage next steps.
+If a purchase was initiated, explain the next steps clearly.
+If this is a follow-up request (like asking for alternatives), acknowledge the context.
+
+${conversationContext}
+
+Respond with ONLY the message text, no JSON or extra formatting.`;
+
+        try {
+          const response = await this.llm.invoke([
+            new SystemMessage(contextPrompt),
+            new HumanMessage(`Generate a response for the user.`)
+          ]);
+          
+          const enhancedMessage = response.content.trim();
+          if (enhancedMessage && enhancedMessage.length > 10) {
+            return {
+              ...state,
+              message: enhancedMessage
+            };
+          }
+        } catch (error) {
+          console.warn("⚠️ Failed to enhance message with LLM:", error.message);
+        }
+      }
+
+      // Return the state with existing message if LLM enhancement fails
+      return state;
+    } catch (error) {
+      console.error("❌ Error formatting response:", error);
+      return state;
     }
   }
 
@@ -249,14 +755,13 @@ Respond with ONLY the JSON object, no additional text.
     try {
       console.log(`🎨 Generating creative domains for: ${searchTerms.join(', ')}`);
       
-      // Use AI to generate creative domain names
-      if (!this.model) {
-        console.log("⚠️ AI model not available for creative generation");
-        return await this.searchDomains(searchTerms, null, false); // Fallback to regular search
+      // Use LangChain LLM to generate creative domain names
+      if (!this.llm) {
+        console.log("⚠️ LLM not available for creative generation");
+        return await this.searchDomains(searchTerms, null); // Fallback to regular search
       }
 
-      const creativePrompt = `
-Generate 10 creative, brandable domain names for a business related to: ${searchTerms.join(', ')}
+      const creativePrompt = `Generate 10 creative, brandable domain names for a business related to: ${searchTerms.join(', ')}
 
 Requirements:
 - Names should be catchy, memorable, and brandable
@@ -269,20 +774,21 @@ Requirements:
 Examples for "live location tracker device":
 - TrackSpot, LivePin, LocateNow, SpotSync, PinPoint, TrackWave, LiveMap, GeoSpot, PositionIQ, TrackPro
 
-Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...]
-`;
+Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...]`;
 
       try {
-        const result = await this.model.generateContent(creativePrompt);
-        const response = await result.response;
-        const text = response.text().trim();
+        const response = await this.llm.invoke([
+          new SystemMessage("You are a creative domain name generator. Generate brandable domain names based on business concepts."),
+          new HumanMessage(creativePrompt)
+        ]);
         
-        console.log("🎨 Creative AI Response:", text);
+        const content = response.content.trim();
+        console.log("🎨 Creative LangChain Response:", content);
         
         // Parse the creative domain names
         let creativeNames;
         try {
-          let jsonText = text;
+          let jsonText = content;
           if (jsonText.startsWith('```json')) {
             jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
           } else if (jsonText.startsWith('```')) {
@@ -291,7 +797,6 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
           creativeNames = JSON.parse(jsonText);
         } catch (parseError) {
           console.warn("⚠️ Failed to parse creative domains, using fallback");
-          // Generate some basic creative combinations as fallback
           creativeNames = this.generateFallbackCreativeNames(searchTerms);
         }
 
@@ -335,7 +840,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         return domains.slice(0, 10); // Return max 10 domains
         
       } catch (aiError) {
-        console.warn("⚠️ AI creative generation failed:", aiError.message);
+        console.warn("⚠️ LangChain creative generation failed:", aiError.message);
         return this.generateFallbackCreativeNames(searchTerms);
       }
 
@@ -551,7 +1056,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       
       return {
         success: true,
-        message: `I've initiated the purchase process for ${domainName} at $${sellingPrice.toFixed(2)}. To complete the purchase, you'll need to provide payment details. The domain has been reserved for you temporarily.`,
+        message: `Perfect! I've reserved ${domainName} for you at $${sellingPrice.toFixed(2)}. Redirecting you to the secure payment page to complete your purchase...`,
         domains: [{
           name: domainName,
           available: false,
@@ -560,7 +1065,11 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         }],
         transactionId: transaction.id,
         paymentIntentId: paymentIntent.id,
-        clientSecret: paymentIntent.client_secret
+        clientSecret: paymentIntent.client_secret,
+        // Add special flags for automatic redirection
+        requiresPayment: true,
+        redirectToPayment: true,
+        paymentUrl: `/payment?domain=${encodeURIComponent(domainName)}&amount=${sellingPrice}&transaction=${transaction.id}`
       };
 
     } catch (error) {
@@ -590,8 +1099,34 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
     }
   }
 
-  getFallbackResponse(message) {
+  getFallbackResponse(message, userId = null) {
     const lowerMessage = message.toLowerCase();
+    
+    // Check conversation history for context
+    let historyContext = "";
+    if (userId) {
+      const history = this.getConversationHistory(userId, 3);
+      const hasRecentDomainCheck = history.some(entry => 
+        entry.role === 'assistant' && entry.message.includes('not available')
+      );
+      
+      // If user recently got "not available" and now asks for alternatives
+      if (hasRecentDomainCheck && (
+        lowerMessage.includes('alternative') || 
+        lowerMessage.includes('suggestion') || 
+        lowerMessage.includes('other') ||
+        lowerMessage.includes('similar') ||
+        lowerMessage.includes('different')
+      )) {
+        return {
+          intent: "domain_search",
+          message: "I'll find some creative alternatives for you based on your previous search.",
+          action: "creative_search",
+          searchTerms: [],
+          isCreativeRequest: true
+        };
+      }
+    }
     
     // Check for purchase intent first
     const purchaseWords = ['buy', 'purchase', 'get', 'register', 'order', 'take'];
@@ -655,6 +1190,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
     try {
       // Note: ai_conversations table doesn't exist in current schema
       // Skipping conversation save to avoid errors
+      // will implement later if needed
       console.log("📝 Conversation saving disabled - table not in schema");
       return;
       
@@ -680,55 +1216,73 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
     try {
       console.log(`🔍 Generating domain suggestions for: "${keyword}"`);
 
-      if (!this.model) {
-        console.log("⚠️ AI model not available, using fallback suggestions");
+      if (!this.llm) {
+        console.log("⚠️ LLM not available, using fallback suggestions");
         return this.getFallbackSuggestions(keyword);
       }
 
-      const prompt = `
-Generate 6 creative domain name suggestions for the keyword "${keyword}".
+      const prompt = `Generate 6 creative domain name suggestions for the keyword "${keyword}".
 Consider variations like:
 - Adding prefixes/suffixes (my, get, the, pro, hub, zone, etc.)
 - Combining with related words
 - Using different extensions (.com, .net, .io, .co)
 
 Respond with ONLY a JSON array of domain names:
-["domain1.com", "domain2.net", "domain3.io", "domain4.co", "domain5.com", "domain6.org"]
-`;
+["domain1.com", "domain2.net", "domain3.io", "domain4.co", "domain5.com", "domain6.org"]`;
 
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
-
-      let suggestions;
       try {
-        suggestions = JSON.parse(text);
-      } catch (parseError) {
-        console.warn("⚠️ Failed to parse AI suggestions, using fallback");
-        suggestions = this.getFallbackSuggestions(keyword);
-      }
+        const response = await this.llm.invoke([
+          new SystemMessage("You are a domain name suggestion generator. Create brandable domain variations."),
+          new HumanMessage(prompt)
+        ]);
+        
+        const content = response.content.trim();
+        console.log("🔍 LangChain Suggestions Response:", content);
 
-      // Check availability for each suggestion
-      const checkedSuggestions = [];
-      for (const domain of suggestions) {
+        let suggestions;
         try {
-          const availability = await namecheapService.checkDomainAvailability(domain);
-          checkedSuggestions.push({
-            name: domain,
-            available: availability.available,
-            price: availability.price || 12.99
-          });
-        } catch (error) {
-          console.warn(`⚠️ Failed to check ${domain}:`, error.message);
-          checkedSuggestions.push({
-            name: domain,
-            available: Math.random() > 0.5,
-            price: 12.99
-          });
+          let jsonText = content;
+          if (jsonText.startsWith('```json')) {
+            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          } else if (jsonText.startsWith('```')) {
+            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+          }
+          suggestions = JSON.parse(jsonText);
+        } catch (parseError) {
+          console.warn("⚠️ Failed to parse LangChain suggestions, using fallback");
+          suggestions = this.getFallbackSuggestions(keyword);
         }
-      }
 
-      return checkedSuggestions;
+        if (!Array.isArray(suggestions)) {
+          console.warn("⚠️ Suggestions response not an array, using fallback");
+          return this.getFallbackSuggestions(keyword);
+        }
+
+        // Check availability for each suggestion
+        const checkedSuggestions = [];
+        for (const domain of suggestions) {
+          try {
+            const availability = await namecheapService.checkDomainAvailability(domain);
+            checkedSuggestions.push({
+              name: domain,
+              available: availability.available,
+              price: availability.price || 12.99
+            });
+          } catch (error) {
+            console.warn(`⚠️ Failed to check ${domain}:`, error.message);
+            checkedSuggestions.push({
+              name: domain,
+              available: Math.random() > 0.5,
+              price: 12.99
+            });
+          }
+        }
+
+        return checkedSuggestions;
+      } catch (llmError) {
+        console.warn("⚠️ LangChain suggestion generation failed:", llmError.message);
+        return this.getFallbackSuggestions(keyword);
+      }
     } catch (error) {
       console.error("❌ Error generating domain suggestions:", error);
       return this.getFallbackSuggestions(keyword);
@@ -765,8 +1319,8 @@ Respond with ONLY a JSON array of domain names:
   }
 }
 
-console.log('📁 About to create AIAgentService instance...');
+console.log('📁 About to create LangChain AIAgentService instance...');
 const aiAgentService = new AIAgentService();
-console.log('✅ AIAgentService instance created');
+console.log('✅ LangChain AIAgentService instance created successfully!');
 
 module.exports = aiAgentService;

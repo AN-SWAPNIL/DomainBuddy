@@ -78,6 +78,13 @@ const AIConsultant = () => {
 
     try {
       const response = await aiService.chatWithAI(messageText);
+      
+      // Debug: Log the complete response
+      console.log("🔍 Complete AI Response:", response);
+      console.log("🔍 Response.redirectToPayment:", response.redirectToPayment);
+      console.log("🔍 Response.requiresPayment:", response.requiresPayment);
+      console.log("🔍 Response.paymentUrl:", response.paymentUrl);
+      console.log("🔍 Response.domains:", response.domains);
 
       const aiMessage = {
         id: Date.now() + 1,
@@ -92,6 +99,31 @@ const AIConsultant = () => {
 
       if (response.suggestions) {
         setSuggestions(response.suggestions);
+      }
+
+      // Handle automatic redirection to payment page
+      if (response.redirectToPayment && response.paymentUrl) {
+        console.log("🔄 Redirecting to payment page:", response.paymentUrl);
+        // Add a small delay to show the message before redirecting
+        setTimeout(() => {
+          window.location.href = response.paymentUrl;
+        }, 2000);
+      } else if (response.requiresPayment && response.domains && response.domains.length > 0) {
+        // Fallback: construct payment URL from response data
+        const domain = response.domains[0];
+        const paymentUrl = `/payment?domain=${encodeURIComponent(domain.name)}&amount=${domain.price}&transaction=${response.transactionId || 'N/A'}`;
+        console.log("🔄 Redirecting to payment page (fallback):", paymentUrl);
+        setTimeout(() => {
+          window.location.href = paymentUrl;
+        }, 2000);
+      } else {
+        console.log("❌ No redirection triggered. Response flags:", {
+          redirectToPayment: response.redirectToPayment,
+          requiresPayment: response.requiresPayment,
+          hasPaymentUrl: !!response.paymentUrl,
+          hasDomainsArray: Array.isArray(response.domains),
+          domainsLength: response.domains?.length || 0
+        });
       }
     } catch (error) {
       console.error("Chat error:", error);
@@ -179,6 +211,15 @@ const AIConsultant = () => {
 
         const result = await domainService.purchaseDomain(purchaseData);
         if (result.success || result.domain) {
+          // Show success message first
+          const successMessage = {
+            id: Date.now(),
+            type: "ai",
+            content: `Perfect! I've reserved ${domain.name} for you. Redirecting you to the secure payment page to complete your purchase...`,
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, successMessage]);
+
           // Redirect to payment page
           const domainData = result.domain || result.data?.domain;
           const amount =
@@ -186,9 +227,14 @@ const AIConsultant = () => {
           const transactionId =
             result.transaction?.id || result.transaction?._id || "N/A";
 
-          window.location.href = `/payment?domain=${encodeURIComponent(
+          const paymentUrl = `/payment?domain=${encodeURIComponent(
             domain.name
           )}&amount=${amount}&transaction=${transactionId}`;
+          
+          console.log("🔄 Redirecting to payment page:", paymentUrl);
+          setTimeout(() => {
+            window.location.href = paymentUrl;
+          }, 2000);
         } else {
           const errorMessage = {
             id: Date.now(),
@@ -246,6 +292,14 @@ const AIConsultant = () => {
             }`}
           >
             <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+
+            {/* Payment Redirection Indicator */}
+            {message.content.includes("Redirecting you to the secure payment page") && (
+              <div className="mt-3 flex items-center space-x-2 text-sm bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                <span className="text-blue-800">Preparing secure payment page...</span>
+              </div>
+            )}
 
             {message.domains && message.domains.length > 0 && (
               <div className="mt-3 space-y-2">

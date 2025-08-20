@@ -371,7 +371,11 @@ class AIAgentService {
         isCreativeRequest: finalState.isCreativeRequest,
         domains: finalState.domains || [],
         success: finalState.success,
-        transactionId: finalState.transactionId
+        transactionId: finalState.transactionId,
+        // Add payment redirection fields
+        requiresPayment: finalState.requiresPayment,
+        redirectToPayment: finalState.redirectToPayment,
+        paymentUrl: finalState.paymentUrl
       };
     } catch (error) {
       console.error("❌ Error processing user message:", error);
@@ -599,7 +603,11 @@ ${conversationContext}`;
               domains: purchaseResult.domains || [],
               message: purchaseResult.message,
               success: purchaseResult.success,
-              transactionId: purchaseResult.transactionId
+              transactionId: purchaseResult.transactionId,
+              // Pass through payment redirection fields
+              requiresPayment: purchaseResult.requiresPayment,
+              redirectToPayment: purchaseResult.redirectToPayment,
+              paymentUrl: purchaseResult.paymentUrl
             };
           }
           break;
@@ -617,7 +625,11 @@ ${conversationContext}`;
         domains: result?.domains || [],
         message: result?.message || "Action completed.",
         success: result?.success || false,
-        transactionId: result?.transactionId
+        transactionId: result?.transactionId,
+        // Pass through payment redirection fields
+        requiresPayment: result?.requiresPayment,
+        redirectToPayment: result?.redirectToPayment,
+        paymentUrl: result?.paymentUrl
       };
     } catch (error) {
       console.error("❌ Error executing action:", error);
@@ -1044,7 +1056,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       
       return {
         success: true,
-        message: `I've initiated the purchase process for ${domainName} at $${sellingPrice.toFixed(2)}. To complete the purchase, you'll need to provide payment details. The domain has been reserved for you temporarily.`,
+        message: `Perfect! I've reserved ${domainName} for you at $${sellingPrice.toFixed(2)}. Redirecting you to the secure payment page to complete your purchase...`,
         domains: [{
           name: domainName,
           available: false,
@@ -1053,7 +1065,11 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         }],
         transactionId: transaction.id,
         paymentIntentId: paymentIntent.id,
-        clientSecret: paymentIntent.client_secret
+        clientSecret: paymentIntent.client_secret,
+        // Add special flags for automatic redirection
+        requiresPayment: true,
+        redirectToPayment: true,
+        paymentUrl: `/payment?domain=${encodeURIComponent(domainName)}&amount=${sellingPrice}&transaction=${transaction.id}`
       };
 
     } catch (error) {
@@ -1174,6 +1190,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
     try {
       // Note: ai_conversations table doesn't exist in current schema
       // Skipping conversation save to avoid errors
+      // will implement later if needed
       console.log("📝 Conversation saving disabled - table not in schema");
       return;
       

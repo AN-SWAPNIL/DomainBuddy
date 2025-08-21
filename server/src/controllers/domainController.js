@@ -225,9 +225,9 @@ const purchaseDomain = async (req, res, next) => {
     const domainName = domainParts[0];
     const extension = domainParts.slice(1).join("."); // Handle multi-part extensions like .co.uk
 
-    const cost = availability.price || 12.99;
-    const markup = cost * 0.1; // 10% markup
-    const sellingPrice = cost * 1.1;
+    const cost = availability.price;
+    const markup = cost * 0; // 10% markup
+    const sellingPrice = cost * 1;
 
     const { data: newDomain, error: domainError } = await supabase
       .from("domains")

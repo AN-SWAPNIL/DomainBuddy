@@ -82,7 +82,7 @@ const AIConsultant = () => {
 
     try {
       const response = await aiService.chatWithAI(messageText);
-      
+
       // Debug: Log the complete response
       console.log("🔍 Complete AI Response:", response);
       console.log("🔍 Response.redirectToPayment:", response.redirectToPayment);
@@ -112,10 +112,18 @@ const AIConsultant = () => {
         setTimeout(() => {
           window.location.href = response.paymentUrl;
         }, 2000);
-      } else if (response.requiresPayment && response.domains && response.domains.length > 0) {
+      } else if (
+        response.requiresPayment &&
+        response.domains &&
+        response.domains.length > 0
+      ) {
         // Fallback: construct payment URL from response data
         const domain = response.domains[0];
-        const paymentUrl = `/payment?domain=${encodeURIComponent(domain.name)}&amount=${domain.price}&transaction=${response.transactionId || 'N/A'}`;
+        const paymentUrl = `/payment?domain=${encodeURIComponent(
+          domain.name
+        )}&amount=${domain.price}&transaction=${
+          response.transactionId || "N/A"
+        }`;
         console.log("🔄 Redirecting to payment page (fallback):", paymentUrl);
         setTimeout(() => {
           window.location.href = paymentUrl;
@@ -126,7 +134,7 @@ const AIConsultant = () => {
           requiresPayment: response.requiresPayment,
           hasPaymentUrl: !!response.paymentUrl,
           hasDomainsArray: Array.isArray(response.domains),
-          domainsLength: response.domains?.length || 0
+          domainsLength: response.domains?.length || 0,
         });
       }
     } catch (error) {
@@ -176,33 +184,37 @@ const AIConsultant = () => {
 
   const proceedWithDomainPurchase = async (domain) => {
     try {
-      // Prepare purchase data in the same format as DomainSearch
+      console.log("🛒 Attempting to purchase domain:", domain.name);
+
+      // Prepare the request data as expected by the backend (same as DomainSearch)
       const purchaseData = {
         domain: domain.name,
-        years: 1,
-        contactInfo: {
-          firstName: "John",
-          lastName: "Doe",
-          email: "user@example.com",
-          phone: "+1.1234567890",
-          address: "123 Main St",
-          city: "Anytown",
-          country: "US",
-        },
       };
 
       const result = await domainService.purchaseDomain(purchaseData);
-      if (result.success || result.domain) {
-        // Redirect to payment page
-        const domainData = result.domain || result.data?.domain;
-        const amount =
-          domainData?.pricing?.sellingPrice || domain.price || 12.99;
-        const transactionId =
-          result.transaction?.id || result.transaction?._id || "N/A";
+      console.log("✅ Purchase result:", result);
 
-        window.location.href = `/payment?domain=${encodeURIComponent(
-          domain.name
-        )}&amount=${amount}&transaction=${transactionId}`;
+      if (result.success) {
+        // Show success message to user
+        const successMessage = {
+          id: Date.now(),
+          type: "ai",
+          content: `Perfect! I've reserved ${domain.name} for you. Redirecting you to the secure payment page to complete your purchase...`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, successMessage]);
+
+        // Handle successful purchase initiation (same as DomainSearch)
+        const transactionId = result.data.transaction?.id || "N/A";
+        const domainData = result.data.domain;
+        const amount = domainData?.selling_price || 12.99;
+
+        // Navigate to payment page with URL parameters
+        setTimeout(() => {
+          window.location.href = `/payment?domain=${encodeURIComponent(
+            domain.name
+          )}&amount=${amount}&transaction=${transactionId}`;
+        }, 1500);
       } else {
         const errorMessage = {
           id: Date.now(),
@@ -216,11 +228,20 @@ const AIConsultant = () => {
       }
     } catch (error) {
       console.error("Domain purchase error:", error);
+
+      // Handle specific error messages (same as DomainSearch)
+      let errorContent =
+        "I'm sorry, but there was an issue initiating the purchase for this domain. Please try again or contact support if the problem persists.";
+      if (error.message?.includes("not available")) {
+        errorContent = `❌ ${domain.name} is no longer available for registration. It may have been purchased by another user or already exists in our system.`;
+      } else if (error.message?.includes("auth")) {
+        errorContent = "Please log in to purchase domains.";
+      }
+
       const errorMessage = {
         id: Date.now(),
         type: "ai",
-        content:
-          "I'm sorry, but there was an error processing your purchase request. Please try again or contact support.",
+        content: errorContent,
         timestamp: new Date(),
         isError: true,
       };
@@ -263,7 +284,7 @@ const AIConsultant = () => {
         }
 
         // If we reach here, profile is complete, proceed with purchase
-        proceedWithDomainPurchase(domain);
+        // proceedWithDomainPurchase(domain);
       }
     } catch (error) {
       console.error("Domain action error:", error);
@@ -312,10 +333,14 @@ const AIConsultant = () => {
             <div className="whitespace-pre-wrap text-sm">{message.content}</div>
 
             {/* Payment Redirection Indicator */}
-            {message.content.includes("Redirecting you to the secure payment page") && (
+            {message.content.includes(
+              "Redirecting you to the secure payment page"
+            ) && (
               <div className="mt-3 flex items-center space-x-2 text-sm bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                <span className="text-blue-800">Preparing secure payment page...</span>
+                <span className="text-blue-800">
+                  Preparing secure payment page...
+                </span>
               </div>
             )}
 

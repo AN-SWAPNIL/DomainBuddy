@@ -121,7 +121,7 @@ const DomainSearch = () => {
     }
 
     // If we reach here, profile is complete, proceed with purchase
-    proceedWithPurchase(domainName);
+    // proceedWithPurchase(domainName);
   };
 
   const proceedWithPurchase = async (domainName) => {

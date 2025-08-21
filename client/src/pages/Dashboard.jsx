@@ -102,7 +102,7 @@ const Dashboard = () => {
         className="bg-gradient-to-r from-primary-600 to-purple-600 rounded-xl p-8 text-white"
       >
         <h1 className="text-3xl font-bold mb-2">
-          Welcome back, {user?.name || "User"}! 👋
+          Welcome back, {user?.first_name || "User"}! 👋
         </h1>
         <p className="text-blue-100 text-lg">
           Ready to discover your next perfect domain? Let's get started!

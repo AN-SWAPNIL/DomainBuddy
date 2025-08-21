@@ -1,15 +1,15 @@
-const jwt = require('jsonwebtoken');
-const supabase = require('../config/database');
+const jwt = require("jsonwebtoken");
+const supabase = require("../config/database");
 
 const authMiddleware = async (req, res, next) => {
   try {
     // Get token from header
-    const authHeader = req.header('Authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const authHeader = req.header("Authorization");
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         success: false,
-        message: 'No token provided, authorization denied'
+        message: "No token provided, authorization denied",
       });
     }
 
@@ -18,18 +18,20 @@ const authMiddleware = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Get user from database
     const { data: user, error } = await supabase
-      .from('users')
-      .select('id, email, name, created_at, updated_at')
-      .eq('id', decoded.userId)
+      .from("users")
+      .select(
+        "id, first_name, last_name, email, phone, street, city, state, country, zip_code, created_at, updated_at"
+      )
+      .eq("id", decoded.userId)
       .single();
 
     if (error || !user) {
       return res.status(401).json({
         success: false,
-        message: 'Token is not valid or user not found'
+        message: "Token is not valid or user not found",
       });
     }
 
@@ -37,25 +39,25 @@ const authMiddleware = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    
-    if (error.name === 'JsonWebTokenError') {
+    console.error("Auth middleware error:", error);
+
+    if (error.name === "JsonWebTokenError") {
       return res.status(401).json({
         success: false,
-        message: 'Invalid token'
+        message: "Invalid token",
       });
     }
-    
-    if (error.name === 'TokenExpiredError') {
+
+    if (error.name === "TokenExpiredError") {
       return res.status(401).json({
         success: false,
-        message: 'Token has expired'
+        message: "Token has expired",
       });
     }
 
     res.status(500).json({
       success: false,
-      message: 'Server error during authentication'
+      message: "Server error during authentication",
     });
   }
 };

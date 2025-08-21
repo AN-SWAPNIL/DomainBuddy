@@ -26,7 +26,7 @@ class StripeService {
 
       const customer = await this.stripe.customers.create({
         email: userData.email,
-        name: userData.name,
+        name: `${userData.first_name} ${userData.last_name}`,
         metadata: {
           userId: userData.id.toString(),
         },

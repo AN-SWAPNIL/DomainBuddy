@@ -84,6 +84,18 @@ export const authService = {
     });
     return response.data.success ? response.data.data : response.data;
   },
+
+  // Alias for backward compatibility
+  changePassword: async (data) => {
+    return authService.updatePassword(data.currentPassword, data.newPassword);
+  },
+
+  // Update user profile
+  updateProfile: async (profileData) => {
+    const response = await api.put("/user/profile", profileData);
+    console.log("🔍 Update profile response:", response.data);
+    return response.data.success ? response.data.data : response.data;
+  },
 };
 
 export default authService;

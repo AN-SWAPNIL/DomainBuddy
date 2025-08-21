@@ -12,10 +12,14 @@ import LoadingSpinner from "../components/ui/LoadingSpinner";
 
 // Validation schema
 const schema = yup.object({
-  name: yup
+  first_name: yup
     .string()
-    .min(2, "Name must be at least 2 characters")
-    .required("Name is required"),
+    .min(2, "First name must be at least 2 characters")
+    .required("First name is required"),
+  last_name: yup
+    .string()
+    .min(2, "Last name must be at least 2 characters")
+    .required("Last name is required"),
   email: yup
     .string()
     .email("Please enter a valid email address")
@@ -94,28 +98,54 @@ const Register = () => {
           className="bg-white rounded-xl shadow-lg p-8"
         >
           <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
-            {/* Name Field */}
+            {/* First Name Field */}
             <div>
               <label
-                htmlFor="name"
+                htmlFor="first_name"
                 className="block text-sm font-medium text-gray-700 mb-2"
               >
-                Full Name
+                First Name
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <User className="h-5 w-5 text-gray-400" />
                 </div>
                 <input
-                  {...register("name")}
+                  {...register("first_name")}
                   type="text"
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="Enter your full name"
+                  placeholder="Enter your first name"
                 />
               </div>
-              {errors.name && (
+              {errors.first_name && (
                 <p className="mt-1 text-sm text-red-600">
-                  {errors.name.message}
+                  {errors.first_name.message}
+                </p>
+              )}
+            </div>
+
+            {/* Last Name Field */}
+            <div>
+              <label
+                htmlFor="last_name"
+                className="block text-sm font-medium text-gray-700 mb-2"
+              >
+                Last Name
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <User className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  {...register("last_name")}
+                  type="text"
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="Enter your last name"
+                />
+              </div>
+              {errors.last_name && (
+                <p className="mt-1 text-sm text-red-600">
+                  {errors.last_name.message}
                 </p>
               )}
             </div>

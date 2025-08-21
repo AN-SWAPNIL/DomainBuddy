@@ -20,12 +20,24 @@ import { authService } from "../services/authService";
 import { paymentService } from "../services/paymentService";
 
 const profileSchema = yup.object({
-  name: yup.string().required("Name is required"),
+  first_name: yup.string().required("First name is required"),
+  last_name: yup.string().required("Last name is required"),
   email: yup.string().email("Invalid email").required("Email is required"),
-  phone: yup.string(),
-  address: yup.string(),
+  phone: yup
+    .string()
+    .test(
+      "no-country-code",
+      "Please do not include country code (+ prefix). The country code will be automatically added based on your selected country.",
+      function (value) {
+        if (!value) return true; // Allow empty values
+        return !value.trim().startsWith("+");
+      }
+    ),
+  street: yup.string(),
   city: yup.string(),
+  state: yup.string(),
   country: yup.string(),
+  zip_code: yup.string(),
 });
 
 const passwordSchema = yup.object({
@@ -57,12 +69,15 @@ const Profile = () => {
   const profileForm = useForm({
     resolver: yupResolver(profileSchema),
     defaultValues: {
-      name: user?.name || "",
+      first_name: user?.first_name || "",
+      last_name: user?.last_name || "",
       email: user?.email || "",
       phone: user?.phone || "",
-      address: user?.address || "",
+      street: user?.street || "",
       city: user?.city || "",
+      state: user?.state || "",
       country: user?.country || "",
+      zip_code: user?.zip_code || "",
     },
   });
 
@@ -120,19 +135,38 @@ const Profile = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name
+                First Name
               </label>
               <div className="relative">
                 <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
-                  {...profileForm.register("name")}
+                  {...profileForm.register("first_name")}
                   className="input pl-10"
-                  placeholder="Enter your full name"
+                  placeholder="Enter your first name"
                 />
               </div>
-              {profileForm.formState.errors.name && (
+              {profileForm.formState.errors.first_name && (
                 <p className="text-red-600 text-sm mt-1">
-                  {profileForm.formState.errors.name.message}
+                  {profileForm.formState.errors.first_name.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Last Name
+              </label>
+              <div className="relative">
+                <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("last_name")}
+                  className="input pl-10"
+                  placeholder="Enter your last name"
+                />
+              </div>
+              {profileForm.formState.errors.last_name && (
+                <p className="text-red-600 text-sm mt-1">
+                  {profileForm.formState.errors.last_name.message}
                 </p>
               )}
             </div>
@@ -167,42 +201,104 @@ const Profile = () => {
                   {...profileForm.register("phone")}
                   type="tel"
                   className="input pl-10"
-                  placeholder="Enter your phone number"
+                  placeholder="e.g., (555) 123-4567 or 5551234567"
+                />
+              </div>
+              <p className="text-xs text-blue-600 mt-1">
+                💡 Don't include country code (e.g., +1, +44). It will be
+                automatically added based on your selected country.
+              </p>
+              {profileForm.formState.errors.phone && (
+                <p className="text-red-600 text-sm mt-1">
+                  {profileForm.formState.errors.phone.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Street Address
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("street")}
+                  className="input pl-10"
+                  placeholder="Enter your street address"
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Country
+                City
               </label>
-              <select {...profileForm.register("country")} className="input">
-                <option value="">Select Country</option>
-                <option value="US">United States</option>
-                <option value="CA">Canada</option>
-                <option value="UK">United Kingdom</option>
-                <option value="AU">Australia</option>
-                <option value="DE">Germany</option>
-                <option value="FR">France</option>
-                <option value="IN">India</option>
-                <option value="JP">Japan</option>
-              </select>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("city")}
+                  className="input pl-10"
+                  placeholder="Enter your city"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                State/Province
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("state")}
+                  className="input pl-10"
+                  placeholder="Enter your state/province"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                ZIP/Postal Code
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("zip_code")}
+                  className="input pl-10"
+                  placeholder="Enter your ZIP/postal code"
+                />
+              </div>
             </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Address
+              Country
             </label>
-            <div className="relative">
-              <MapPinIcon className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <textarea
-                {...profileForm.register("address")}
-                rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 pl-10 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="Enter your address"
-              />
-            </div>
+            <select {...profileForm.register("country")} className="input">
+              <option value="">Select Country</option>
+              <option value="US">United States</option>
+              <option value="CA">Canada</option>
+              <option value="GB">United Kingdom</option>
+              <option value="AU">Australia</option>
+              <option value="DE">Germany</option>
+              <option value="FR">France</option>
+              <option value="IN">India</option>
+              <option value="JP">Japan</option>
+              <option value="CN">China</option>
+              <option value="BR">Brazil</option>
+              <option value="MX">Mexico</option>
+              <option value="IT">Italy</option>
+              <option value="ES">Spain</option>
+              <option value="NL">Netherlands</option>
+              <option value="SE">Sweden</option>
+              <option value="NO">Norway</option>
+              <option value="DK">Denmark</option>
+              <option value="FI">Finland</option>
+            </select>
           </div>
 
           <div className="flex justify-end">

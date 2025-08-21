@@ -1,10 +1,13 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const namecheapService = require("./namecheapService");
 const supabase = require("../config/database");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 class AIAgentService {
   constructor() {
-    console.log('🔧 AIAgentService constructor called');
+    console.log("🔧 AIAgentService constructor called");
     this.genAI = null;
     this.model = null;
     this.initializeModel();
@@ -12,23 +15,28 @@ class AIAgentService {
 
   async initializeModel() {
     try {
-      console.log('🤖 Initializing Gemini AI model...');
-      
+      console.log("🤖 Initializing Gemini AI model...");
+
       if (!process.env.GOOGLE_API_KEY) {
-        console.warn("⚠️ GOOGLE_API_KEY not found in environment variables. AI features will be limited.");
+        console.warn(
+          "⚠️ GOOGLE_API_KEY not found in environment variables. AI features will be limited."
+        );
         return false;
       }
 
-      console.log('📋 Google API Key found, length:', process.env.GOOGLE_API_KEY.length);
+      console.log(
+        "📋 Google API Key found, length:",
+        process.env.GOOGLE_API_KEY.length
+      );
 
       // Initialize Google Generative AI
       this.genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-      this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      
-      console.log('✅ Gemini AI model initialized successfully');
+      this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+      console.log("✅ Gemini AI model initialized successfully");
       return true;
     } catch (error) {
-      console.error('❌ Failed to initialize Gemini AI model:', error.message);
+      console.error("❌ Failed to initialize Gemini AI model:", error.message);
       this.genAI = null;
       this.model = null;
       return false;
@@ -101,10 +109,10 @@ Respond with ONLY the JSON object, no additional text.
       try {
         let jsonText = text.trim();
         // Remove markdown code blocks
-        if (jsonText.startsWith('```json')) {
-          jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (jsonText.startsWith('```')) {
-          jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        if (jsonText.startsWith("```json")) {
+          jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
+        } else if (jsonText.startsWith("```")) {
+          jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
         }
         aiResponse = JSON.parse(jsonText);
       } catch (parseError) {
@@ -138,20 +146,26 @@ Respond with ONLY the JSON object, no additional text.
       switch (aiResponse.action) {
         case "search_domains":
           if (aiResponse.searchTerms && aiResponse.searchTerms.length > 0) {
-            const searchResults = await this.searchDomains(aiResponse.searchTerms, null, false);
+            const searchResults = await this.searchDomains(
+              aiResponse.searchTerms,
+              null,
+              false
+            );
             return {
               domains: searchResults,
-              message: `I found ${searchResults.length} domains for your search.`
+              message: `I found ${searchResults.length} domains for your search.`,
             };
           }
           break;
 
         case "creative_search":
           if (aiResponse.searchTerms && aiResponse.searchTerms.length > 0) {
-            const creativeDomains = await this.generateCreativeDomains(aiResponse.searchTerms);
+            const creativeDomains = await this.generateCreativeDomains(
+              aiResponse.searchTerms
+            );
             return {
               domains: creativeDomains,
-              message: `I found ${creativeDomains.length} creative domain suggestions for you.`
+              message: `I found ${creativeDomains.length} creative domain suggestions for you.`,
             };
           }
           break;
@@ -159,22 +173,28 @@ Respond with ONLY the JSON object, no additional text.
         case "check_domain":
           if (aiResponse.domain) {
             // Use specific domain search for exact domain checks
-            const searchResults = await this.searchDomains(null, aiResponse.domain);
+            const searchResults = await this.searchDomains(
+              null,
+              aiResponse.domain
+            );
             return {
               domains: searchResults,
-              message: `Here's the information for ${aiResponse.domain}.`
+              message: `Here's the information for ${aiResponse.domain}.`,
             };
           }
           break;
 
         case "purchase_domain":
           if (aiResponse.domain && userId) {
-            const purchaseResult = await this.processDomainPurchase(aiResponse.domain, userId);
+            const purchaseResult = await this.processDomainPurchase(
+              aiResponse.domain,
+              userId
+            );
             return {
               domains: purchaseResult.domains || [],
               message: purchaseResult.message,
               success: purchaseResult.success,
-              transactionId: purchaseResult.transactionId
+              transactionId: purchaseResult.transactionId,
             };
           }
           break;
@@ -191,48 +211,60 @@ Respond with ONLY the JSON object, no additional text.
   async searchDomains(searchTerms, specificDomain = null) {
     try {
       const domains = [];
-      
+
       // If a specific domain is provided (e.g., "doggy.com"), check only that domain
       if (specificDomain) {
         console.log(`🎯 Checking specific domain: ${specificDomain}`);
         try {
-          const availability = await namecheapService.checkDomainAvailability(specificDomain);
+          const availability = await namecheapService.checkDomainAvailability(
+            specificDomain
+          );
           domains.push({
             name: specificDomain,
             available: availability.available,
-            price: availability.price || 12.99
+            price: availability.price || 12.99,
           });
         } catch (error) {
-          console.warn(`⚠️ Failed to check domain ${specificDomain}:`, error.message);
+          console.warn(
+            `⚠️ Failed to check domain ${specificDomain}:`,
+            error.message
+          );
           domains.push({
             name: specificDomain,
             available: false,
-            price: 12.99
+            price: 12.99,
           });
         }
         return domains;
       }
-      
+
       // Generate domain variations for search terms
-      const extensions = ['.com', '.net', '.org', '.io', '.co']; // Include .org
-      
-      for (const term of searchTerms.slice(0, 2)) { // Limit to 2 terms to avoid too many requests
-        for (const ext of extensions) { // Use all extensions, not just first 2
+      const extensions = [".com", ".net", ".org", ".io", ".co"]; // Include .org
+
+      for (const term of searchTerms.slice(0, 2)) {
+        // Limit to 2 terms to avoid too many requests
+        for (const ext of extensions) {
+          // Use all extensions, not just first 2
           const domainName = `${term.toLowerCase()}${ext}`;
           try {
-            const availability = await namecheapService.checkDomainAvailability(domainName);
+            const availability = await namecheapService.checkDomainAvailability(
+              domainName
+            );
             domains.push({
               name: domainName,
               available: availability.available,
-              price: availability.price || 12.99
+              price: availability.price || 12.99,
             });
           } catch (error) {
-            console.warn(`⚠️ Failed to check domain ${domainName}:`, error.message);
+            console.warn(
+              `⚠️ Failed to check domain ${domainName}:`,
+              error.message
+            );
             // Add domain with fallback data
             domains.push({
               name: domainName,
               available: Math.random() > 0.5, // Random for demo
-              price: 12.99
+              price: 12.99,
             });
           }
         }
@@ -247,8 +279,10 @@ Respond with ONLY the JSON object, no additional text.
 
   async generateCreativeDomains(searchTerms) {
     try {
-      console.log(`🎨 Generating creative domains for: ${searchTerms.join(', ')}`);
-      
+      console.log(
+        `🎨 Generating creative domains for: ${searchTerms.join(", ")}`
+      );
+
       // Use AI to generate creative domain names
       if (!this.model) {
         console.log("⚠️ AI model not available for creative generation");
@@ -256,7 +290,9 @@ Respond with ONLY the JSON object, no additional text.
       }
 
       const creativePrompt = `
-Generate 10 creative, brandable domain names for a business related to: ${searchTerms.join(', ')}
+Generate 10 creative, brandable domain names for a business related to: ${searchTerms.join(
+        ", "
+      )}
 
 Requirements:
 - Names should be catchy, memorable, and brandable
@@ -276,17 +312,19 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         const result = await this.model.generateContent(creativePrompt);
         const response = await result.response;
         const text = response.text().trim();
-        
+
         console.log("🎨 Creative AI Response:", text);
-        
+
         // Parse the creative domain names
         let creativeNames;
         try {
           let jsonText = text;
-          if (jsonText.startsWith('```json')) {
-            jsonText = jsonText.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-          } else if (jsonText.startsWith('```')) {
-            jsonText = jsonText.replace(/^```\s*/, '').replace(/\s*```$/, '');
+          if (jsonText.startsWith("```json")) {
+            jsonText = jsonText
+              .replace(/^```json\s*/, "")
+              .replace(/\s*```$/, "");
+          } else if (jsonText.startsWith("```")) {
+            jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
           }
           creativeNames = JSON.parse(jsonText);
         } catch (parseError) {
@@ -302,29 +340,34 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
 
         // Check availability for creative domain names
         const domains = [];
-        const extensions = ['.com', '.net', '.org', '.io', '.co'];
-        
+        const extensions = [".com", ".net", ".org", ".io", ".co"];
+
         // Limit to first 8 creative names to avoid too many API calls
         for (const creativeName of creativeNames.slice(0, 8)) {
-          if (typeof creativeName === 'string' && creativeName.length > 0) {
-            for (const ext of extensions.slice(0, 3)) { // Check first 3 extensions for each creative name
+          if (typeof creativeName === "string" && creativeName.length > 0) {
+            for (const ext of extensions.slice(0, 3)) {
+              // Check first 3 extensions for each creative name
               const domainName = `${creativeName.toLowerCase()}${ext}`;
               try {
-                const availability = await namecheapService.checkDomainAvailability(domainName);
+                const availability =
+                  await namecheapService.checkDomainAvailability(domainName);
                 domains.push({
                   name: domainName,
                   available: availability.available,
-                  price: availability.price || 12.99
+                  price: availability.price || 12.99,
                 });
-                
+
                 // If we have enough domains, break early
                 if (domains.length >= 10) break;
               } catch (error) {
-                console.warn(`⚠️ Failed to check creative domain ${domainName}:`, error.message);
+                console.warn(
+                  `⚠️ Failed to check creative domain ${domainName}:`,
+                  error.message
+                );
                 domains.push({
                   name: domainName,
                   available: Math.random() > 0.5,
-                  price: 12.99
+                  price: 12.99,
                 });
               }
             }
@@ -333,12 +376,10 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         }
 
         return domains.slice(0, 10); // Return max 10 domains
-        
       } catch (aiError) {
         console.warn("⚠️ AI creative generation failed:", aiError.message);
         return this.generateFallbackCreativeNames(searchTerms);
       }
-
     } catch (error) {
       console.error("❌ Error generating creative domains:", error);
       return this.generateFallbackCreativeNames(searchTerms);
@@ -347,34 +388,58 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
 
   generateFallbackCreativeNames(searchTerms) {
     console.log("🔄 Using fallback creative domain generation");
-    
+
     // Simple fallback: combine terms and add creative suffixes
-    const creativeSuffixes = ['spot', 'hub', 'pro', 'zone', 'lab', 'wave', 'sync', 'now', 'go', 'kit'];
-    const creativePrefixes = ['my', 'get', 'smart', 'quick', 'easy', 'super', 'prime', 'next', 'live', 'auto'];
-    
+    const creativeSuffixes = [
+      "spot",
+      "hub",
+      "pro",
+      "zone",
+      "lab",
+      "wave",
+      "sync",
+      "now",
+      "go",
+      "kit",
+    ];
+    const creativePrefixes = [
+      "my",
+      "get",
+      "smart",
+      "quick",
+      "easy",
+      "super",
+      "prime",
+      "next",
+      "live",
+      "auto",
+    ];
+
     const creativeNames = [];
     const baseTerms = searchTerms.slice(0, 2); // Use first 2 terms
-    
+
     // Combine base terms with suffixes
     for (const term of baseTerms) {
       for (const suffix of creativeSuffixes.slice(0, 3)) {
         creativeNames.push(`${term.toLowerCase()}${suffix}`);
       }
     }
-    
+
     // Combine prefixes with base terms
     for (const term of baseTerms) {
       for (const prefix of creativePrefixes.slice(0, 2)) {
         creativeNames.push(`${prefix}${term.toLowerCase()}`);
       }
     }
-    
+
     return creativeNames.slice(0, 8); // Return max 8 fallback names
   }
 
   async processDomainPurchase(domainName, userId) {
     try {
-      console.log(`💳 Processing automated purchase for domain: ${domainName} by user: ${userId}`);
+      console.log(
+        `💳 Processing automated purchase for domain: ${domainName} by user: ${userId}`
+      );
 
       // Import services that we need
       const stripeService = require("./stripeService");
@@ -383,35 +448,40 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       // Step 1: Check domain availability
       let availability;
       try {
-        availability = await namecheapService.checkDomainAvailability(domainName);
+        availability = await namecheapService.checkDomainAvailability(
+          domainName
+        );
         console.log(`🔍 Domain availability check result:`, availability);
       } catch (error) {
-        console.error(`❌ Failed to check domain availability: ${error.message}`);
+        console.error(
+          `❌ Failed to check domain availability: ${error.message}`
+        );
         return {
           success: false,
-          message: `Sorry, I couldn't check the availability of ${domainName}. Please try again later.`
+          message: `Sorry, I couldn't check the availability of ${domainName}. Please try again later.`,
         };
       }
 
       if (!availability.available) {
         return {
           success: false,
-          message: `Sorry, ${domainName} is not available for purchase. It may already be registered.`
+          message: `Sorry, ${domainName} is not available for purchase. It may already be registered.`,
         };
       }
 
       // Step 2: Get user information for payment
       const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('id, email, name, stripe_customer_id')
-        .eq('id', userId)
+        .from("users")
+        .select("id, email, name, stripe_customer_id")
+        .eq("id", userId)
         .single();
 
       if (userError || !user) {
-        console.error('❌ Failed to get user information:', userError);
+        console.error("❌ Failed to get user information:", userError);
         return {
           success: false,
-          message: 'Sorry, I encountered an error processing your purchase. Please try again.'
+          message:
+            "Sorry, I encountered an error processing your purchase. Please try again.",
         };
       }
 
@@ -444,44 +514,49 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
 
       if (domainError) {
         console.error("❌ Domain creation error:", domainError);
-        
-        if (domainError.code === "23505" && domainError.details?.includes("full_domain")) {
+
+        if (
+          domainError.code === "23505" &&
+          domainError.details?.includes("full_domain")
+        ) {
           return {
             success: false,
-            message: `${domainName} has already been purchased or is in our system.`
+            message: `${domainName} has already been purchased or is in our system.`,
           };
         }
 
         return {
           success: false,
-          message: `Sorry, I encountered an error setting up your domain purchase. Please try again.`
+          message: `Sorry, I encountered an error setting up your domain purchase. Please try again.`,
         };
       }
 
       // Step 4: Create or get Stripe customer
       let stripeCustomerId = user.stripe_customer_id;
-      
+
       if (!stripeCustomerId) {
         try {
           const customer = await stripeService.createCustomer({
             email: user.email,
-            name: user.name,
-            id: user.id
+            first_name: user.first_name,
+            last_name: user.last_name,
+            id: user.id,
           });
           stripeCustomerId = customer.id;
 
           // Update user with Stripe customer ID
           await supabase
-            .from('users')
+            .from("users")
             .update({ stripe_customer_id: stripeCustomerId })
-            .eq('id', userId);
+            .eq("id", userId);
 
           console.log(`✅ Created Stripe customer: ${stripeCustomerId}`);
         } catch (error) {
-          console.error('❌ Failed to create Stripe customer:', error);
+          console.error("❌ Failed to create Stripe customer:", error);
           return {
             success: false,
-            message: 'Sorry, I encountered an error setting up payment processing. Please try again.'
+            message:
+              "Sorry, I encountered an error setting up payment processing. Please try again.",
           };
         }
       }
@@ -491,21 +566,22 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       try {
         paymentIntent = await stripeService.createPaymentIntent(
           sellingPrice,
-          'usd',
+          "usd",
           stripeCustomerId,
           {
             domain: domainName,
             userId: userId.toString(),
             domainId: newDomain.id.toString(),
-            automated_purchase: 'true'
+            automated_purchase: "true",
           }
         );
         console.log(`💳 Created payment intent: ${paymentIntent.id}`);
       } catch (error) {
-        console.error('❌ Failed to create payment intent:', error);
+        console.error("❌ Failed to create payment intent:", error);
         return {
           success: false,
-          message: 'Sorry, I encountered an error setting up the payment. Please try again.'
+          message:
+            "Sorry, I encountered an error setting up the payment. Please try again.",
         };
       }
 
@@ -533,7 +609,8 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         console.error("❌ Transaction creation error:", transactionError);
         return {
           success: false,
-          message: 'Sorry, I encountered an error recording the transaction. Please try again.'
+          message:
+            "Sorry, I encountered an error recording the transaction. Please try again.",
         };
       }
 
@@ -542,112 +619,152 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       // 1. Use a stored payment method for the user
       // 2. Or integrate with a payment processor that supports automatic payments
       // 3. Or prompt the user to complete payment via a secure link
-      
+
       // For demo purposes, let's simulate a successful payment
-      console.log(`🔄 Simulating automatic payment processing for ${domainName}...`);
-      
+      console.log(
+        `🔄 Simulating automatic payment processing for ${domainName}...`
+      );
+
       // In production, you would actually process the payment here
       // For now, we'll return a message asking the user to complete payment
-      
+
       return {
         success: true,
-        message: `I've initiated the purchase process for ${domainName} at $${sellingPrice.toFixed(2)}. To complete the purchase, you'll need to provide payment details. The domain has been reserved for you temporarily.`,
-        domains: [{
-          name: domainName,
-          available: false,
-          price: sellingPrice,
-          status: 'pending_payment'
-        }],
+        message: `I've initiated the purchase process for ${domainName} at $${sellingPrice.toFixed(
+          2
+        )}. To complete the purchase, you'll need to provide payment details. The domain has been reserved for you temporarily.`,
+        domains: [
+          {
+            name: domainName,
+            available: false,
+            price: sellingPrice,
+            status: "pending_payment",
+          },
+        ],
         transactionId: transaction.id,
         paymentIntentId: paymentIntent.id,
-        clientSecret: paymentIntent.client_secret
+        clientSecret: paymentIntent.client_secret,
       };
-
     } catch (error) {
-      console.error('❌ Error in automated domain purchase:', error);
+      console.error("❌ Error in automated domain purchase:", error);
       return {
         success: false,
-        message: 'Sorry, I encountered an unexpected error while processing your purchase. Please try again or contact support.'
+        message:
+          "Sorry, I encountered an unexpected error while processing your purchase. Please try again or contact support.",
       };
     }
   }
 
   async checkDomain(domainName) {
     try {
-      const availability = await namecheapService.checkDomainAvailability(domainName);
+      const availability = await namecheapService.checkDomainAvailability(
+        domainName
+      );
       return {
         name: domainName,
         available: availability.available,
-        price: availability.price || 12.99
+        price: availability.price || 12.99,
       };
     } catch (error) {
       console.warn(`⚠️ Failed to check domain ${domainName}:`, error.message);
       return {
         name: domainName,
         available: false,
-        price: 12.99
+        price: 12.99,
       };
     }
   }
 
   getFallbackResponse(message) {
     const lowerMessage = message.toLowerCase();
-    
+
     // Check for purchase intent first
-    const purchaseWords = ['buy', 'purchase', 'get', 'register', 'order', 'take'];
-    const hasPurchaseIntent = purchaseWords.some(word => lowerMessage.includes(word));
-    
+    const purchaseWords = [
+      "buy",
+      "purchase",
+      "get",
+      "register",
+      "order",
+      "take",
+    ];
+    const hasPurchaseIntent = purchaseWords.some((word) =>
+      lowerMessage.includes(word)
+    );
+
     // Check if message contains a complete domain name pattern
-    const domainPattern = /([a-zA-Z0-9-]+\.(com|net|org|io|co|xyz|tech|online|store|site|app|dev))/gi;
+    const domainPattern =
+      /([a-zA-Z0-9-]+\.(com|net|org|io|co|xyz|tech|online|store|site|app|dev))/gi;
     const domainMatches = message.match(domainPattern);
-    
+
     if (hasPurchaseIntent && domainMatches && domainMatches.length > 0) {
       return {
         intent: "domain_purchase",
         message: `I'll process the purchase for ${domainMatches[0]}`,
         action: "purchase_domain",
-        domain: domainMatches[0].toLowerCase()
+        domain: domainMatches[0].toLowerCase(),
       };
     }
-    
+
     if (domainMatches && domainMatches.length > 0) {
       return {
         intent: "domain_info",
         message: `I'll check the availability of ${domainMatches[0]}`,
         action: "check_domain",
-        domain: domainMatches[0].toLowerCase()
+        domain: domainMatches[0].toLowerCase(),
       };
     }
-    
-    if (lowerMessage.includes('domain') && (lowerMessage.includes('search') || lowerMessage.includes('find'))) {
+
+    if (
+      lowerMessage.includes("domain") &&
+      (lowerMessage.includes("search") || lowerMessage.includes("find"))
+    ) {
       // Extract potential domain names or keywords (remove common words and extensions)
-      const words = message.split(' ').filter(word => {
-        const cleanWord = word.replace(/[.,!?]/g, '').toLowerCase();
-        return cleanWord.length > 2 && 
-               !['the', 'and', 'for', 'search', 'find', 'domain', 'want', 'need', 'domains', 'com', 'net', 'org', 'io', 'co'].includes(cleanWord) &&
-               !cleanWord.startsWith('.'); // Remove extensions like .com
+      const words = message.split(" ").filter((word) => {
+        const cleanWord = word.replace(/[.,!?]/g, "").toLowerCase();
+        return (
+          cleanWord.length > 2 &&
+          ![
+            "the",
+            "and",
+            "for",
+            "search",
+            "find",
+            "domain",
+            "want",
+            "need",
+            "domains",
+            "com",
+            "net",
+            "org",
+            "io",
+            "co",
+          ].includes(cleanWord) &&
+          !cleanWord.startsWith(".")
+        ); // Remove extensions like .com
       });
 
       return {
         intent: "domain_search",
-        message: `I'll search for domains related to: ${words.join(', ')}`,
+        message: `I'll search for domains related to: ${words.join(", ")}`,
         action: "search_domains",
-        searchTerms: words.slice(0, 3) // Limit to 3 terms
+        searchTerms: words.slice(0, 3), // Limit to 3 terms
       };
     }
 
-    if (lowerMessage.includes('buy') || lowerMessage.includes('purchase')) {
+    if (lowerMessage.includes("buy") || lowerMessage.includes("purchase")) {
       return {
         intent: "domain_purchase",
-        message: "I can help you purchase a domain. Please specify which domain you'd like to buy (e.g., 'buy example.com').",
-        action: "none"
+        message:
+          "I can help you purchase a domain. Please specify which domain you'd like to buy (e.g., 'buy example.com').",
+        action: "none",
       };
     }
 
     return {
       intent: "general_help",
-      message: "I'm here to help you with domain searches, purchases, and information. You can ask me to search for domains, check availability, or buy specific domains.",
-      action: "none"
+      message:
+        "I'm here to help you with domain searches, purchases, and information. You can ask me to search for domains, check availability, or buy specific domains.",
+      action: "none",
     };
   }
 
@@ -657,16 +774,14 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       // Skipping conversation save to avoid errors
       console.log("📝 Conversation saving disabled - table not in schema");
       return;
-      
-      const { error } = await supabase
-        .from('ai_conversations')
-        .insert({
-          user_id: userId,
-          user_message: userMessage,
-          ai_response: JSON.stringify(aiResponse),
-          intent: aiResponse.intent,
-          created_at: new Date().toISOString()
-        });
+
+      const { error } = await supabase.from("ai_conversations").insert({
+        user_id: userId,
+        user_message: userMessage,
+        ai_response: JSON.stringify(aiResponse),
+        intent: aiResponse.intent,
+        created_at: new Date().toISOString(),
+      });
 
       if (error) {
         console.warn("⚠️ Failed to save conversation:", error.message);
@@ -712,18 +827,20 @@ Respond with ONLY a JSON array of domain names:
       const checkedSuggestions = [];
       for (const domain of suggestions) {
         try {
-          const availability = await namecheapService.checkDomainAvailability(domain);
+          const availability = await namecheapService.checkDomainAvailability(
+            domain
+          );
           checkedSuggestions.push({
             name: domain,
             available: availability.available,
-            price: availability.price || 12.99
+            price: availability.price || 12.99,
           });
         } catch (error) {
           console.warn(`⚠️ Failed to check ${domain}:`, error.message);
           checkedSuggestions.push({
             name: domain,
             available: Math.random() > 0.5,
-            price: 12.99
+            price: 12.99,
           });
         }
       }
@@ -736,37 +853,37 @@ Respond with ONLY a JSON array of domain names:
   }
 
   getFallbackSuggestions(keyword) {
-    const prefixes = ['my', 'get', 'the', 'pro', 'best'];
-    const suffixes = ['hub', 'zone', 'pro', 'online', 'store'];
-    const extensions = ['.com', '.net', '.io', '.co', '.org', '.online'];
+    const prefixes = ["my", "get", "the", "pro", "best"];
+    const suffixes = ["hub", "zone", "pro", "online", "store"];
+    const extensions = [".com", ".net", ".io", ".co", ".org", ".online"];
 
     const suggestions = [];
-    
+
     // Add direct keyword with different extensions
-    extensions.slice(0, 2).forEach(ext => {
+    extensions.slice(0, 2).forEach((ext) => {
       suggestions.push(`${keyword}${ext}`);
     });
 
     // Add prefix combinations
-    prefixes.slice(0, 2).forEach(prefix => {
+    prefixes.slice(0, 2).forEach((prefix) => {
       suggestions.push(`${prefix}${keyword}.com`);
     });
 
     // Add suffix combinations
-    suffixes.slice(0, 2).forEach(suffix => {
+    suffixes.slice(0, 2).forEach((suffix) => {
       suggestions.push(`${keyword}${suffix}.com`);
     });
 
-    return suggestions.map(domain => ({
+    return suggestions.map((domain) => ({
       name: domain,
       available: Math.random() > 0.5, // Random for demo
-      price: 12.99
+      price: 12.99,
     }));
   }
 }
 
-console.log('📁 About to create AIAgentService instance...');
+console.log("📁 About to create AIAgentService instance...");
 const aiAgentService = new AIAgentService();
-console.log('✅ AIAgentService instance created');
+console.log("✅ AIAgentService instance created");
 
 module.exports = aiAgentService;

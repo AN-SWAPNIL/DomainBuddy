@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   PaperAirplaneIcon,
   SparklesIcon,
@@ -13,9 +14,12 @@ import {
 import { aiService } from "../services/aiService";
 import { domainService } from "../services/domainService";
 import { useAuth } from "../contexts/AuthContext";
+import { useProfileCheck } from "../utils/profileValidation";
 
 const AIConsultant = () => {
+  const navigate = useNavigate();
   const { isAuthenticated, user } = useAuth();
+  const { checkProfileAndProceed } = useProfileCheck(user, navigate);
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -138,6 +142,60 @@ const AIConsultant = () => {
     handleSendMessage(suggestion.text);
   };
 
+  const proceedWithDomainPurchase = async (domain) => {
+    try {
+      // Prepare purchase data in the same format as DomainSearch
+      const purchaseData = {
+        domain: domain.name,
+        years: 1,
+        contactInfo: {
+          firstName: "John",
+          lastName: "Doe",
+          email: "user@example.com",
+          phone: "+1.1234567890",
+          address: "123 Main St",
+          city: "Anytown",
+          country: "US",
+        },
+      };
+
+      const result = await domainService.purchaseDomain(purchaseData);
+      if (result.success || result.domain) {
+        // Redirect to payment page
+        const domainData = result.domain || result.data?.domain;
+        const amount =
+          domainData?.pricing?.sellingPrice || domain.price || 12.99;
+        const transactionId =
+          result.transaction?.id || result.transaction?._id || "N/A";
+
+        window.location.href = `/payment?domain=${encodeURIComponent(
+          domain.name
+        )}&amount=${amount}&transaction=${transactionId}`;
+      } else {
+        const errorMessage = {
+          id: Date.now(),
+          type: "ai",
+          content:
+            "I'm sorry, but there was an issue initiating the purchase for this domain. Please try again or contact support if the problem persists.",
+          timestamp: new Date(),
+          isError: true,
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      }
+    } catch (error) {
+      console.error("Domain purchase error:", error);
+      const errorMessage = {
+        id: Date.now(),
+        type: "ai",
+        content:
+          "I'm sorry, but there was an error processing your purchase request. Please try again or contact support.",
+        timestamp: new Date(),
+        isError: true,
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    }
+  };
+
   const handleDomainAction = async (domain, action) => {
     try {
       if (action === "search") {
@@ -162,44 +220,17 @@ const AIConsultant = () => {
 
         setMessages((prev) => [...prev, aiMessage]);
       } else if (action === "purchase") {
-        // Prepare purchase data in the same format as DomainSearch
-        const purchaseData = {
-          domain: domain.name,
-          years: 1,
-          contactInfo: {
-            firstName: "John",
-            lastName: "Doe",
-            email: "user@example.com",
-            phone: "+1.1234567890",
-            address: "123 Main St",
-            city: "Anytown",
-            country: "US",
-          },
-        };
+        // Check if profile is complete before proceeding
+        const canProceed = checkProfileAndProceed(() => {
+          proceedWithDomainPurchase(domain);
+        }, domain.name);
 
-        const result = await domainService.purchaseDomain(purchaseData);
-        if (result.success || result.domain) {
-          // Redirect to payment page
-          const domainData = result.domain || result.data?.domain;
-          const amount =
-            domainData?.pricing?.sellingPrice || domain.price || 12.99;
-          const transactionId =
-            result.transaction?.id || result.transaction?._id || "N/A";
-
-          window.location.href = `/payment?domain=${encodeURIComponent(
-            domain.name
-          )}&amount=${amount}&transaction=${transactionId}`;
-        } else {
-          const errorMessage = {
-            id: Date.now(),
-            type: "ai",
-            content:
-              "I'm sorry, but there was an issue initiating the purchase for this domain. Please try again or contact support if the problem persists.",
-            timestamp: new Date(),
-            isError: true,
-          };
-          setMessages((prev) => [...prev, errorMessage]);
+        if (!canProceed) {
+          return; // Profile is incomplete, user will be redirected
         }
+
+        // If we reach here, profile is complete, proceed with purchase
+        proceedWithDomainPurchase(domain);
       }
     } catch (error) {
       console.error("Domain action error:", error);

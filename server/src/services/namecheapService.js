@@ -72,7 +72,9 @@ class NamecheapService {
 
       console.log("Checking availability for:", domainName);
       console.log("Using IP address:", clientIp);
-      const availabilityResponse = await axios.get(this.baseUrl, { params: availabilityParams });
+      const availabilityResponse = await axios.get(this.baseUrl, {
+        params: availabilityParams,
+      });
 
       // Check for API errors in the XML response first
       if (availabilityResponse.data.includes('Status="ERROR"')) {
@@ -107,8 +109,13 @@ class NamecheapService {
       }
 
       // Parse availability response
-      const availabilityResult = await this.parseXmlResponse(availabilityResponse.data);
-      const domainResult = this.extractDomainInfo(availabilityResult, domainName);
+      const availabilityResult = await this.parseXmlResponse(
+        availabilityResponse.data
+      );
+      const domainResult = this.extractDomainInfo(
+        availabilityResult,
+        domainName
+      );
       console.log("Domain availability result:", domainResult);
 
       // If there was an API error, throw it instead of using fallback
@@ -124,10 +131,10 @@ class NamecheapService {
       if (domainResult.available) {
         try {
           // Extract extension from domain name (e.g., "com" from "example.com")
-          const extension = domainName.split('.').pop().toLowerCase();
-          
+          const extension = domainName.split(".").pop().toLowerCase();
+
           console.log(`Getting pricing for extension: ${extension}`);
-          
+
           const pricingParams = {
             ApiUser: this.apiUser,
             ApiKey: this.apiKey,
@@ -136,24 +143,33 @@ class NamecheapService {
             ClientIp: clientIp,
             ProductType: "DOMAIN",
             ProductName: extension.toUpperCase(),
-            ActionName: "REGISTER"
+            ActionName: "REGISTER",
           };
 
-          const pricingResponse = await axios.get(this.baseUrl, { params: pricingParams });
+          const pricingResponse = await axios.get(this.baseUrl, {
+            params: pricingParams,
+          });
           console.log("Pricing API response:", pricingResponse.data);
-          
+
           // Check for pricing API errors
           if (pricingResponse.data.includes('Status="ERROR"')) {
             console.warn("Pricing API returned error, using default price");
             finalPrice = this.getDefaultPrice(domainName);
           } else {
             // Parse pricing response
-            const pricingResult = await this.parseXmlResponse(pricingResponse.data);
-            const extractedPrice = this.extractPricingForOneYear(pricingResult, extension);
-            
+            const pricingResult = await this.parseXmlResponse(
+              pricingResponse.data
+            );
+            const extractedPrice = this.extractPricingForOneYear(
+              pricingResult,
+              extension
+            );
+
             if (extractedPrice !== null) {
               finalPrice = extractedPrice;
-              console.log(`Got pricing from API: $${finalPrice} for ${extension}`);
+              console.log(
+                `Got pricing from API: $${finalPrice} for ${extension}`
+              );
             } else {
               console.warn("Could not extract pricing from API, using default");
               finalPrice = this.getDefaultPrice(domainName);
@@ -201,8 +217,38 @@ class NamecheapService {
 
   async registerDomain(domainName, years = 1, contactInfo) {
     try {
+      console.log("🚀 Starting domain registration process for:", domainName);
+
+      // Validate contact information first
+      const validationErrors = this.validateContactInfo(contactInfo);
+      if (validationErrors.length > 0) {
+        throw new Error(
+          `Contact validation failed: ${validationErrors.join(", ")}`
+        );
+      }
+
+      // Format phone number for Namecheap API
+      const formattedPhone = this.formatPhoneForNamecheap(
+        contactInfo.phone,
+        contactInfo.country
+      );
+
+      console.log("📋 Registration details:", {
+        domain: domainName,
+        years: years,
+        contact: {
+          name: `${contactInfo.firstName} ${contactInfo.lastName}`,
+          email: contactInfo.email,
+          originalPhone: contactInfo.phone,
+          formattedPhone: formattedPhone,
+          country: contactInfo.country,
+          address: `${contactInfo.address}, ${contactInfo.city}, ${contactInfo.state} ${contactInfo.postalCode}, ${contactInfo.country}`,
+        },
+      });
+
       // Use environment IP or detect current IP
       const clientIp = this.clientIp || (await this.getCurrentIP());
+      console.log("🌐 Using client IP for registration:", clientIp);
 
       const params = {
         ApiUser: this.apiUser,
@@ -212,7 +258,7 @@ class NamecheapService {
         ClientIp: clientIp,
         DomainName: domainName,
         Years: years,
-        // Contact information parameters
+        // Contact information parameters with formatted phone
         RegistrantFirstName: contactInfo.firstName,
         RegistrantLastName: contactInfo.lastName,
         RegistrantAddress1: contactInfo.address,
@@ -220,7 +266,7 @@ class NamecheapService {
         RegistrantStateProvince: contactInfo.state,
         RegistrantPostalCode: contactInfo.postalCode,
         RegistrantCountry: contactInfo.country,
-        RegistrantPhone: contactInfo.phone,
+        RegistrantPhone: formattedPhone, // Use formatted phone
         RegistrantEmailAddress: contactInfo.email,
         // Copy registrant info to other contact types
         TechFirstName: contactInfo.firstName,
@@ -230,7 +276,7 @@ class NamecheapService {
         TechStateProvince: contactInfo.state,
         TechPostalCode: contactInfo.postalCode,
         TechCountry: contactInfo.country,
-        TechPhone: contactInfo.phone,
+        TechPhone: formattedPhone, // Use formatted phone
         TechEmailAddress: contactInfo.email,
         AdminFirstName: contactInfo.firstName,
         AdminLastName: contactInfo.lastName,
@@ -239,7 +285,7 @@ class NamecheapService {
         AdminStateProvince: contactInfo.state,
         AdminPostalCode: contactInfo.postalCode,
         AdminCountry: contactInfo.country,
-        AdminPhone: contactInfo.phone,
+        AdminPhone: formattedPhone, // Use formatted phone
         AdminEmailAddress: contactInfo.email,
         AuxBillingFirstName: contactInfo.firstName,
         AuxBillingLastName: contactInfo.lastName,
@@ -248,27 +294,92 @@ class NamecheapService {
         AuxBillingStateProvince: contactInfo.state,
         AuxBillingPostalCode: contactInfo.postalCode,
         AuxBillingCountry: contactInfo.country,
-        AuxBillingPhone: contactInfo.phone,
+        AuxBillingPhone: formattedPhone, // Use formatted phone
         AuxBillingEmailAddress: contactInfo.email,
       };
 
+      console.log("📤 Sending registration request to Namecheap API...");
+      console.log("📞 Phone number being sent to API:", formattedPhone);
       const response = await axios.get(this.baseUrl, { params });
+
+      console.log("📥 Received response from Namecheap API");
+      console.log("Response data:", response.data);
 
       // Parse response for success/failure
       const success = response.data.includes('Status="OK"');
 
       if (success) {
+        const registrationId = this.extractRegistrationId(response.data);
+        console.log("✅ DOMAIN REGISTRATION SUCCESSFUL!");
+        console.log("🎉 Registration details:", {
+          domain: domainName,
+          registrationId: registrationId,
+          years: years,
+          registrant: `${contactInfo.firstName} ${contactInfo.lastName}`,
+          email: contactInfo.email,
+          timestamp: new Date().toISOString(),
+        });
+
         return {
           success: true,
           domain: domainName,
-          registrationId: this.extractRegistrationId(response.data),
+          registrationId: registrationId,
         };
       } else {
-        throw new Error("Domain registration failed");
+        // Extract detailed error information from XML response
+        console.error("❌ Domain registration failed");
+        console.error("Full API response:", response.data);
+
+        // Try to extract specific error message
+        const errorMatch = response.data.match(
+          /<Error Number="(\d+)">([^<]+)<\/Error>/
+        );
+        if (errorMatch) {
+          const errorNumber = errorMatch[1];
+          const errorMessage = errorMatch[2];
+          console.error(`🚫 Namecheap Error ${errorNumber}: ${errorMessage}`);
+
+          // Provide specific guidance for common errors
+          if (errorNumber === "2030280") {
+            console.error(
+              "💳 This error usually indicates insufficient account balance or payment issues"
+            );
+          } else if (errorNumber === "2011154") {
+            console.error("🌐 Domain is not available for registration");
+          } else if (errorNumber === "1011150") {
+            console.error("🔒 IP address not whitelisted for API access");
+          } else if (errorNumber === "2011166") {
+            console.error("📧 Invalid contact information provided");
+          }
+
+          throw new Error(
+            `Namecheap Registration Error ${errorNumber}: ${errorMessage}`
+          );
+        }
+
+        throw new Error(
+          "Domain registration failed - check Namecheap response above"
+        );
       }
     } catch (error) {
-      console.error("Domain Registration Error:", error.message);
-      throw new Error("Failed to register domain");
+      console.error("💥 DOMAIN REGISTRATION ERROR:");
+      console.error("Domain:", domainName);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+
+      // If it's an axios error, log more details
+      if (error.response) {
+        console.error("HTTP Status:", error.response.status);
+        console.error("Response data:", error.response.data);
+        console.error("Response headers:", error.response.headers);
+      } else if (error.request) {
+        console.error("No response received from Namecheap API");
+        console.error("Request details:", error.request);
+      }
+
+      throw new Error(
+        `Failed to register domain ${domainName}: ${error.message}`
+      );
     }
   }
 
@@ -440,7 +551,7 @@ class NamecheapService {
   extractPricingForOneYear(xmlResult, extension) {
     try {
       console.log(`Extracting pricing for extension: ${extension}`);
-      
+
       const commandResponse = xmlResult?.ApiResponse?.CommandResponse?.[0];
       const userGetPricingResult = commandResponse?.UserGetPricingResult?.[0];
       const productTypes = userGetPricingResult?.ProductType || [];
@@ -451,41 +562,55 @@ class NamecheapService {
       for (const productType of productTypes) {
         const productTypeName = productType.$.Name;
         console.log(`Checking product type: ${productTypeName}`);
-        
+
         if (productTypeName.toLowerCase() === "domains") {
           const productCategories = productType.ProductCategory || [];
           console.log(`Found ${productCategories.length} product categories`);
-          
+
           // Look for "register" category
           for (const category of productCategories) {
             const categoryName = category.$.Name;
             console.log(`Checking category: ${categoryName}`);
-            
+
             if (categoryName.toLowerCase() === "register") {
               const products = category.Product || [];
-              console.log(`Found ${products.length} products in register category`);
-              
+              console.log(
+                `Found ${products.length} products in register category`
+              );
+
               // Find the product matching our extension
               for (const product of products) {
                 const productName = product.$.Name.toLowerCase();
-                console.log(`Checking product: ${productName} against ${extension.toLowerCase()}`);
-                
+                console.log(
+                  `Checking product: ${productName} against ${extension.toLowerCase()}`
+                );
+
                 if (productName === extension.toLowerCase()) {
                   const prices = product.Price || [];
-                  console.log(`Found ${prices.length} price entries for ${extension}`);
-                  
+                  console.log(
+                    `Found ${prices.length} price entries for ${extension}`
+                  );
+
                   // Look for 1-year pricing
                   for (const price of prices) {
                     const duration = price.$.Duration;
                     const durationType = price.$.DurationType;
-                    console.log(`Checking price: Duration=${duration}, DurationType=${durationType}`);
-                    
-                    if (duration === "1" && durationType.toLowerCase() === "year") {
+                    console.log(
+                      `Checking price: Duration=${duration}, DurationType=${durationType}`
+                    );
+
+                    if (
+                      duration === "1" &&
+                      durationType.toLowerCase() === "year"
+                    ) {
                       const priceValue = parseFloat(price.$.Price);
-                      const additionalCost = parseFloat(price.$.AdditionalCost) || 0;
+                      const additionalCost =
+                        parseFloat(price.$.AdditionalCost) || 0;
                       const totalPrice = priceValue + additionalCost;
-                      
-                      console.log(`Found 1-year price for ${extension}: $${priceValue} + $${additionalCost} = $${totalPrice}`);
+
+                      console.log(
+                        `Found 1-year price for ${extension}: $${priceValue} + $${additionalCost} = $${totalPrice}`
+                      );
                       return totalPrice;
                     }
                   }
@@ -495,7 +620,7 @@ class NamecheapService {
           }
         }
       }
-      
+
       console.warn(`No 1-year pricing found for extension: ${extension}`);
       return null;
     } catch (error) {
@@ -505,8 +630,152 @@ class NamecheapService {
   }
 
   extractRegistrationId(xmlData) {
+    console.log("🔍 Extracting registration ID from response...");
     const match = xmlData.match(/DomainID="([^"]+)"/);
-    return match ? match[1] : null;
+    if (match) {
+      const registrationId = match[1];
+      console.log("✅ Found registration ID:", registrationId);
+      return registrationId;
+    } else {
+      console.warn("⚠️  Could not extract registration ID from response");
+      console.log("XML data for debugging:", xmlData);
+      return null;
+    }
+  }
+
+  // Format phone number for Namecheap API requirements
+  formatPhoneForNamecheap(phone, country) {
+    if (!phone) {
+      console.warn("⚠️ No phone number provided, using default");
+      return "+1.1234567890"; // Default fallback
+    }
+
+    // Comprehensive country code mappings based on Profile page options
+    const countryPhoneCodes = {
+      US: "+1", // United States
+      CA: "+1", // Canada
+      GB: "+44", // United Kingdom
+      AU: "+61", // Australia
+      DE: "+49", // Germany
+      FR: "+33", // France
+      IN: "+91", // India
+      JP: "+81", // Japan
+      CN: "+86", // China
+      BR: "+55", // Brazil
+      MX: "+52", // Mexico
+      IT: "+39", // Italy
+      ES: "+34", // Spain
+      NL: "+31", // Netherlands
+      SE: "+46", // Sweden
+      NO: "+47", // Norway
+      DK: "+45", // Denmark
+      FI: "+358", // Finland
+    };
+
+    // Remove all non-digit characters except +
+    let cleanPhone = phone.replace(/[^\d+]/g, "");
+
+    console.log("📞 Formatting phone:", {
+      original: phone,
+      cleaned: cleanPhone,
+      country: country,
+    });
+
+    // If phone doesn't start with +, add country code
+    if (!cleanPhone.startsWith("+")) {
+      const countryCode = countryPhoneCodes[country?.toUpperCase()];
+      if (countryCode) {
+        cleanPhone = countryCode + cleanPhone;
+        console.log(
+          `📞 Added country code ${countryCode} for ${country}: ${cleanPhone}`
+        );
+      } else {
+        console.warn(
+          `⚠️ Unknown country code for ${country}, using +1 (US) as default`
+        );
+        cleanPhone = "+1" + cleanPhone;
+      }
+    }
+
+    // Convert to Namecheap format: +CountryCode.PhoneNumber
+    const match = cleanPhone.match(/^(\+\d{1,3})(\d+)$/);
+    if (match) {
+      const formattedPhone = `${match[1]}.${match[2]}`;
+      console.log(
+        `✅ Successfully formatted phone: ${phone} → ${formattedPhone} for country: ${country}`
+      );
+      return formattedPhone;
+    }
+
+    // Fallback if parsing fails
+    console.warn("⚠️ Could not format phone number, using fallback:", phone);
+    const fallbackCountryCode =
+      countryPhoneCodes[country?.toUpperCase()] || "+1";
+    return `${fallbackCountryCode}.1234567890`;
+  }
+
+  // Validate contact information before registration
+  validateContactInfo(contactInfo) {
+    const errors = [];
+
+    console.log("🔍 Validating contact information:", contactInfo);
+
+    // Validate phone number
+    if (!contactInfo.phone || contactInfo.phone.length < 7) {
+      errors.push("Phone number is required and must be at least 7 digits");
+    }
+
+    // Validate country code
+    const supportedCountries = [
+      "US",
+      "CA",
+      "GB",
+      "AU",
+      "DE",
+      "FR",
+      "IN",
+      "JP",
+      "CN",
+      "BR",
+      "MX",
+      "IT",
+      "ES",
+      "NL",
+      "SE",
+      "NO",
+      "DK",
+      "FI",
+    ];
+    if (
+      !contactInfo.country ||
+      !supportedCountries.includes(contactInfo.country.toUpperCase())
+    ) {
+      errors.push(`Country must be one of: ${supportedCountries.join(", ")}`);
+    }
+
+    // Validate required fields
+    const requiredFields = [
+      "firstName",
+      "lastName",
+      "email",
+      "address",
+      "city",
+      "state",
+      "postalCode",
+    ];
+    for (const field of requiredFields) {
+      if (!contactInfo[field] || contactInfo[field].trim() === "") {
+        errors.push(`${field} is required`);
+      }
+    }
+
+    if (errors.length > 0) {
+      console.error("❌ Contact validation errors:", errors);
+    } else {
+      console.log("✅ Contact information validation passed");
+    }
+
+    return errors;
   }
 }
 

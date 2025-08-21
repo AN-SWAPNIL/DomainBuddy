@@ -118,7 +118,8 @@ const createPaymentIntent = async (req, res, next) => {
       const customer = await stripeService.createCustomer({
         id: req.user.id,
         email: req.user.email,
-        name: req.user.name,
+        first_name: req.user.first_name,
+        last_name: req.user.last_name,
       });
       customerId = customer.id;
 
@@ -340,20 +341,20 @@ const confirmPayment = async (req, res, next) => {
       try {
         // Register domain with Namecheap
         if (transaction.type === "purchase") {
-          const firstName = req.user.name.split(" ")[0] || "User";
+          // const firstName = req.user.name.split(" ")[0] || "User";
           const registrationResult = await namecheapService.registerDomain(
             domain.full_domain,
             1,
             {
-              firstName: firstName,
-              lastName: req.user.name.split(" ")[1] || firstName,
+              firstName: req.user.first_name,
+              lastName: req.user.last_name,
               email: req.user.email,
-              phone: req.user.phone || "+1.1234567890",
-              address: req.user.street || "123 Main St",
-              city: req.user.city || "City",
-              state: req.user.state || "State",
-              postalCode: req.user.zip_code || "12345",
-              country: req.user.country || "US",
+              phone: req.user.phone,
+              address: req.user.street,
+              city: req.user.city,
+              state: req.user.state,
+              postalCode: req.user.zip_code,
+              country: req.user.country,
             }
           );
 

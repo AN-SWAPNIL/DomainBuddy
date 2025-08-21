@@ -91,7 +91,9 @@ const Navbar = () => {
                   <button className="flex items-center space-x-2 p-2 rounded-full hover:bg-gray-100 transition-colors">
                     <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center">
                       <span className="text-white text-sm font-medium">
-                        {user?.name?.charAt(0).toUpperCase() || "U"}
+                        {user?.first_name?.charAt(0).toUpperCase() ||
+                          user?.last_name?.charAt(0).toUpperCase() ||
+                          "U"}
                       </span>
                     </div>
                   </button>

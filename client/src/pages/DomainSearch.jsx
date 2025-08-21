@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
 import {
   MagnifyingGlassIcon,
   CheckCircleIcon,
@@ -7,8 +9,12 @@ import {
   ClockIcon,
 } from "@heroicons/react/24/outline";
 import { domainService } from "../services/domainService";
+import { useProfileCheck } from "../utils/profileValidation";
 
 const DomainSearch = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { checkProfileAndProceed } = useProfileCheck(user, navigate);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -105,6 +111,20 @@ const DomainSearch = () => {
   const [purchasedDomains, setPurchasedDomains] = useState(new Set());
 
   const handlePurchase = async (domainName) => {
+    // Check if profile is complete before proceeding
+    const canProceed = checkProfileAndProceed(() => {
+      proceedWithPurchase(domainName);
+    }, domainName);
+
+    if (!canProceed) {
+      return; // Profile is incomplete, user will be redirected
+    }
+
+    // If we reach here, profile is complete, proceed with purchase
+    proceedWithPurchase(domainName);
+  };
+
+  const proceedWithPurchase = async (domainName) => {
     // Prevent multiple purchases of the same domain
     if (purchasedDomains.has(domainName)) {
       alert(`${domainName} has already been added to your cart!`);
@@ -232,9 +252,7 @@ const DomainSearch = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             Find Your Perfect Domain
           </h1>
-          <p className="text-gray-600">
-            Search for available domains
-          </p>
+          <p className="text-gray-600">Search for available domains</p>
         </div>
 
         {/* Search Form */}

@@ -1,0 +1,72 @@
+// Profile validation utilities
+export const validateProfileCompleteness = (user) => {
+  if (!user) {
+    return {
+      isComplete: false,
+      missingFields: ["User data not available"],
+      message: "Please log in to continue",
+    };
+  }
+
+  const requiredFields = [
+    { field: "first_name", label: "First Name", value: user.first_name },
+    { field: "last_name", label: "Last Name", value: user.last_name },
+    { field: "email", label: "Email", value: user.email },
+    { field: "phone", label: "Phone Number", value: user.phone },
+    { field: "street", label: "Street Address", value: user.street },
+    { field: "city", label: "City", value: user.city },
+    { field: "state", label: "State/Province", value: user.state },
+    { field: "country", label: "Country", value: user.country },
+    { field: "zip_code", label: "ZIP/Postal Code", value: user.zip_code },
+  ];
+
+  const missingFields = [];
+
+  requiredFields.forEach(({ field, label, value }) => {
+    if (!value || value.trim() === "") {
+      missingFields.push(label);
+    }
+  });
+
+  const isComplete = missingFields.length === 0;
+
+  return {
+    isComplete,
+    missingFields,
+    message: isComplete
+      ? "Profile is complete"
+      : `Please complete your profile. Missing: ${missingFields.join(", ")}`,
+  };
+};
+
+// Profile completeness hook for React components
+export const useProfileCheck = (user, navigate) => {
+  const checkProfileAndProceed = (onSuccess, domain = "") => {
+    const validation = validateProfileCompleteness(user);
+
+    if (!validation.isComplete) {
+      // Show more user-friendly notification about incomplete profile
+      const domainText = domain ? ` for "${domain}"` : "";
+      const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
+        ", "
+      )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
+
+      if (window.confirm(message)) {
+        // Redirect to profile page
+        navigate("/profile");
+        return false;
+      }
+      return false;
+    }
+
+    // Profile is complete, proceed with the action
+    if (onSuccess) {
+      onSuccess();
+    }
+    return true;
+  };
+
+  return { checkProfileAndProceed, validateProfileCompleteness };
+};
+
+export default { validateProfileCompleteness, useProfileCheck };

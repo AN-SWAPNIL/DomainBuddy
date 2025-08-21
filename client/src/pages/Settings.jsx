@@ -14,16 +14,15 @@ const Settings = () => {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [profileData, setProfileData] = useState({
-    name: "",
+    first_name: "",
+    last_name: "",
     email: "",
     phone: "",
-    address: {
-      street: "",
-      city: "",
-      state: "",
-      country: "US",
-      zipCode: "",
-    },
+    street: "",
+    city: "",
+    state: "",
+    country: "US",
+    zip_code: "",
   });
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
@@ -55,16 +54,15 @@ const Settings = () => {
       const userData = await userService.getProfile();
       setUser(userData);
       setProfileData({
-        name: userData.name || "",
+        first_name: userData.first_name || "",
+        last_name: userData.last_name || "",
         email: userData.email || "",
-        phone: userData.profile?.phone || "",
-        address: {
-          street: userData.profile?.address?.street || "",
-          city: userData.profile?.address?.city || "",
-          state: userData.profile?.address?.state || "",
-          country: userData.profile?.address?.country || "US",
-          zipCode: userData.profile?.address?.zipCode || "",
-        },
+        phone: userData.phone || "",
+        street: userData.street || "",
+        city: userData.city || "",
+        state: userData.state || "",
+        country: userData.country || "US",
+        zip_code: userData.zip_code || "",
       });
     } catch (error) {
       console.error("Failed to load user data:", error);
@@ -132,13 +130,27 @@ const Settings = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Full Name
+            First Name
           </label>
           <input
             type="text"
-            value={profileData.name}
+            value={profileData.first_name}
             onChange={(e) =>
-              setProfileData({ ...profileData, name: e.target.value })
+              setProfileData({ ...profileData, first_name: e.target.value })
+            }
+            className="input-field"
+            required
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Last Name
+          </label>
+          <input
+            type="text"
+            value={profileData.last_name}
+            onChange={(e) =>
+              setProfileData({ ...profileData, last_name: e.target.value })
             }
             className="input-field"
             required
@@ -177,12 +189,9 @@ const Settings = () => {
           </label>
           <input
             type="text"
-            value={profileData.address.street}
+            value={profileData.street}
             onChange={(e) =>
-              setProfileData({
-                ...profileData,
-                address: { ...profileData.address, street: e.target.value },
-              })
+              setProfileData({ ...profileData, street: e.target.value })
             }
             className="input-field"
           />
@@ -193,12 +202,9 @@ const Settings = () => {
           </label>
           <input
             type="text"
-            value={profileData.address.city}
+            value={profileData.city}
             onChange={(e) =>
-              setProfileData({
-                ...profileData,
-                address: { ...profileData.address, city: e.target.value },
-              })
+              setProfileData({ ...profileData, city: e.target.value })
             }
             className="input-field"
           />
@@ -209,12 +215,22 @@ const Settings = () => {
           </label>
           <input
             type="text"
-            value={profileData.address.state}
+            value={profileData.state}
             onChange={(e) =>
-              setProfileData({
-                ...profileData,
-                address: { ...profileData.address, state: e.target.value },
-              })
+              setProfileData({ ...profileData, state: e.target.value })
+            }
+            className="input-field"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            ZIP/Postal Code
+          </label>
+          <input
+            type="text"
+            value={profileData.zip_code}
+            onChange={(e) =>
+              setProfileData({ ...profileData, zip_code: e.target.value })
             }
             className="input-field"
           />
@@ -224,12 +240,9 @@ const Settings = () => {
             Country
           </label>
           <select
-            value={profileData.address.country}
+            value={profileData.country}
             onChange={(e) =>
-              setProfileData({
-                ...profileData,
-                address: { ...profileData.address, country: e.target.value },
-              })
+              setProfileData({ ...profileData, country: e.target.value })
             }
             className="input-field"
           >
@@ -240,23 +253,17 @@ const Settings = () => {
             <option value="DE">Germany</option>
             <option value="FR">France</option>
             <option value="IN">India</option>
+            <option value="CN">China</option>
+            <option value="BR">Brazil</option>
+            <option value="MX">Mexico</option>
+            <option value="IT">Italy</option>
+            <option value="ES">Spain</option>
+            <option value="NL">Netherlands</option>
+            <option value="SE">Sweden</option>
+            <option value="NO">Norway</option>
+            <option value="DK">Denmark</option>
+            <option value="FI">Finland</option>
           </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            ZIP/Postal Code
-          </label>
-          <input
-            type="text"
-            value={profileData.address.zipCode}
-            onChange={(e) =>
-              setProfileData({
-                ...profileData,
-                address: { ...profileData.address, zipCode: e.target.value },
-              })
-            }
-            className="input-field"
-          />
         </div>
       </div>
       <div className="flex justify-end">

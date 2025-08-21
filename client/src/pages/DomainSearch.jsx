@@ -43,7 +43,7 @@ const DomainSearch = () => {
           {
             name: result.domain || searchTerm,
             available: result.available,
-            price: result.price || 12.99,
+            price: result.price,
             premium: false,
             registrar: "Namecheap",
             description: `Availability check for ${searchTerm}`,
@@ -72,11 +72,11 @@ const DomainSearch = () => {
             return {
               name: result.domain,
               available: result.available,
-              price: result.available ? result.price || 12.99 : 0,
-              premium: result.isPremium || false,
+              price: result.price ,
+              premium: result.isPremium,
               registrar: "Namecheap",
               description: result.available
-                ? `Available for $${result.price || 12.99}`
+                ? `Available for $${result.price}`
                 : result.reason || "Not available",
             };
           });

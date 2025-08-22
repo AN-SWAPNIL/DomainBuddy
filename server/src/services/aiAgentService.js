@@ -908,7 +908,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       // Step 2: Get user information for payment
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('id, email, name, stripe_customer_id')
+        .select('id, email, first_name, last_name, stripe_customer_id')
         .eq('id', userId)
         .single();
 
@@ -919,6 +919,9 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
           message: 'Sorry, I encountered an error processing your purchase. Please try again.'
         };
       }
+
+      // Construct full name from first_name and last_name
+      const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Customer';
 
       // Step 3: Create domain record in database
       const domainParts = domainName.split(".");
@@ -970,7 +973,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         try {
           const customer = await stripeService.createCustomer({
             email: user.email,
-            name: user.name,
+            name: fullName,
             id: user.id
           });
           stripeCustomerId = customer.id;

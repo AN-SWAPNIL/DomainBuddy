@@ -53,7 +53,7 @@ const passwordSchema = yup.object({
 });
 
 const Profile = () => {
-  const { user, updateUser } = useContext(AuthContext);
+  const { user, updateUser, refreshUser } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState("profile");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -87,8 +87,38 @@ const Profile = () => {
 
   const handleProfileUpdate = async (data) => {
     try {
-      const updatedUser = await authService.updateProfile(data);
+      console.log("🔄 Updating profile with data:", data);
+      const response = await authService.updateProfile(data);
+      console.log("✅ Profile update response:", response);
+      
+      // Extract user data from response
+      const updatedUser = response.success ? response.data.user : response.user || response;
+      console.log("📋 Updated user data:", updatedUser);
+      
+      // Update the context with the new user data
       updateUser(updatedUser);
+      
+      // Also refresh from server to ensure consistency
+      try {
+        await refreshUser();
+        console.log("✅ User data refreshed from server after profile update");
+      } catch (refreshError) {
+        console.warn("⚠️ Failed to refresh user data from server, but profile was updated:", refreshError);
+      }
+      
+      // Reset form with the updated data to reflect changes
+      profileForm.reset({
+        first_name: updatedUser.first_name || "",
+        last_name: updatedUser.last_name || "",
+        email: updatedUser.email || "",
+        phone: updatedUser.phone || "",
+        street: updatedUser.street || "",
+        city: updatedUser.city || "",
+        state: updatedUser.state || "",
+        country: updatedUser.country || "",
+        zip_code: updatedUser.zip_code || "",
+      });
+      
       alert("Profile updated successfully!");
     } catch (error) {
       console.error("Profile update error:", error);

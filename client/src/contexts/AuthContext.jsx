@@ -198,10 +198,33 @@ export const AuthProvider = ({ children }) => {
 
   // Update user function
   const updateUser = (userData) => {
+    console.log("🔄 AuthContext: Updating user data:", userData);
     dispatch({
       type: AuthActionTypes.SET_USER,
       payload: userData,
     });
+  };
+
+  // Refresh user data from server
+  const refreshUser = async () => {
+    try {
+      console.log("🔄 AuthContext: Refreshing user data from server...");
+      const userData = await authService.getCurrentUser();
+      console.log("📋 AuthContext: Fresh user data from server:", userData);
+      
+      // Extract user from nested response structure
+      const user = userData.success ? userData.data.user : userData.user;
+      
+      dispatch({
+        type: AuthActionTypes.SET_USER,
+        payload: user,
+      });
+      
+      return user;
+    } catch (error) {
+      console.error("❌ AuthContext: Failed to refresh user data:", error);
+      throw error;
+    }
   };
 
   const value = {
@@ -211,6 +234,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     clearError,
     updateUser,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,7 +10,7 @@ const userController = {
       const { data: user, error } = await supabase
         .from("users")
         .select(
-          "id, first_name, last_name, email, phone, street, city, state, country, zip_code, stripe_customer_id, role, created_at, updated_at"
+          "id, first_name, last_name, email, phone, street, city, state, country, zip_code, stripe_customer_id, created_at, updated_at"
         )
         .eq("id", req.user.id)
         .single();
@@ -97,7 +97,7 @@ const userController = {
         .update(updateData)
         .eq("id", req.user.id)
         .select(
-          "id, first_name, last_name, email, phone, street, city, state, country, zip_code, stripe_customer_id, role, created_at, updated_at"
+          "id, first_name, last_name, email, phone, street, city, state, country, zip_code, stripe_customer_id, created_at, updated_at"
         )
         .single();
 

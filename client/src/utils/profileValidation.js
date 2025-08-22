@@ -30,6 +30,22 @@ export const validateProfileCompleteness = (user) => {
 
   const isComplete = missingFields.length === 0;
 
+  console.log("🔍 Profile validation result:", {
+    isComplete,
+    missingFields,
+    userFields: {
+      first_name: user.first_name,
+      last_name: user.last_name,
+      email: user.email,
+      phone: user.phone,
+      street: user.street,
+      city: user.city,
+      state: user.state,
+      country: user.country,
+      zip_code: user.zip_code,
+    }
+  });
+
   return {
     isComplete,
     missingFields,
@@ -41,29 +57,84 @@ export const validateProfileCompleteness = (user) => {
 
 // Profile completeness hook for React components
 export const useProfileCheck = (user, navigate) => {
-  const checkProfileAndProceed = (onSuccess, domain = "") => {
-    const validation = validateProfileCompleteness(user);
+  const checkProfileAndProceed = async (onSuccess, domain = "") => {
+    try {
+      // First, try to get fresh user data from the AuthContext if available
+      let currentUser = user;
+      
+      // Check if we're in a React component with access to AuthContext
+      try {
+        const { useAuth } = await import("../contexts/AuthContext");
+        const authContext = useAuth();
+        
+        if (authContext && authContext.refreshUser) {
+          console.log("🔄 Using AuthContext.refreshUser to get latest user data...");
+          currentUser = await authContext.refreshUser();
+        } else {
+          // Fallback to API call
+          console.log("🔄 Fallback: Refreshing user data via API call...");
+          const { authService } = await import("../services/authService");
+          const currentUserResponse = await authService.getCurrentUser();
+          currentUser = currentUserResponse.success ? currentUserResponse.data.user : currentUserResponse.user;
+        }
+      } catch (contextError) {
+        console.log("� AuthContext not available, using direct API call...");
+        // Fallback to direct API call
+        const { authService } = await import("../services/authService");
+        const currentUserResponse = await authService.getCurrentUser();
+        currentUser = currentUserResponse.success ? currentUserResponse.data.user : currentUserResponse.user;
+      }
+      
+      console.log("📋 Current user data for validation:", currentUser);
+      
+      // Use the refreshed user data for validation
+      const validation = validateProfileCompleteness(currentUser);
+      
+      if (!validation.isComplete) {
+        // Show more user-friendly notification about incomplete profile
+        const domainText = domain ? ` for "${domain}"` : "";
+        const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
+          ", "
+        )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
 
-    if (!validation.isComplete) {
-      // Show more user-friendly notification about incomplete profile
-      const domainText = domain ? ` for "${domain}"` : "";
-      const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
-        ", "
-      )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
-
-      if (window.confirm(message)) {
-        // Redirect to profile page
-        navigate("/profile");
+        if (window.confirm(message)) {
+          // Redirect to profile page
+          navigate("/profile");
+          return false;
+        }
         return false;
       }
-      return false;
-    }
 
-    // Profile is complete, proceed with the action
-    if (onSuccess) {
-      onSuccess();
+      // Profile is complete, proceed with the action
+      console.log("✅ Profile is complete, proceeding with action");
+      if (onSuccess) {
+        onSuccess();
+      }
+      return true;
+    } catch (error) {
+      console.error("❌ Error refreshing user data:", error);
+      
+      // Fallback to existing user data if API call fails
+      const validation = validateProfileCompleteness(user);
+      
+      if (!validation.isComplete) {
+        const domainText = domain ? ` for "${domain}"` : "";
+        const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
+          ", "
+        )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
+
+        if (window.confirm(message)) {
+          navigate("/profile");
+          return false;
+        }
+        return false;
+      }
+
+      if (onSuccess) {
+        onSuccess();
+      }
+      return true;
     }
-    return true;
   };
 
   return { checkProfileAndProceed, validateProfileCompleteness };

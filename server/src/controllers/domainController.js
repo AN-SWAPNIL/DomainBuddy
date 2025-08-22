@@ -76,16 +76,16 @@ const searchDomains = async (req, res, next) => {
       ".com", ".net", ".org", ".io", ".co", 
       // Business & professional
       ".biz", ".info", ".pro", ".name", ".mobi",
-      // Modern & tech extensions
-      ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store", ".shop",
-      // Geographic & country
-      ".us", ".uk", ".ca", ".au", ".de", ".fr", ".it", ".es", ".nl",
-      // Creative & media
-      ".design", ".art", ".photo", ".video", ".music", ".blog", ".news",
-      // Industry specific
-      ".agency", ".consulting", ".marketing", ".finance", ".legal", ".health",
-      // Newer popular extensions
-      ".xyz", ".top", ".click", ".link", ".download", ".email", ".website"
+      // // Modern & tech extensions
+      // ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store", ".shop",
+      // // Geographic & country
+      // ".us", ".uk", ".ca", ".au", ".de", ".fr", ".it", ".es", ".nl",
+      // // Creative & media
+      // ".design", ".art", ".photo", ".video", ".music", ".blog", ".news",
+      // // Industry specific
+      // ".agency", ".consulting", ".marketing", ".finance", ".legal", ".health",
+      // // Newer popular extensions
+      // ".xyz", ".top", ".click", ".link", ".download", ".email", ".website"
     ];
 
     const { q: query, extensions = namecheapStyleExtensions } = req.query;

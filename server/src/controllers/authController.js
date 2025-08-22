@@ -218,7 +218,7 @@ const authController = {
       // Check if user exists
       const { data: user, error } = await supabase
         .from("users")
-        .select("id, email, name")
+        .select("id, email, first_name, last_name")
         .eq("email", email)
         .single();
 

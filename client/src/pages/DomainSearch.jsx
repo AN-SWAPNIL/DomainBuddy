@@ -20,6 +20,11 @@ const DomainSearch = () => {
   const [loading, setLoading] = useState(false);
   const [selectedDomains, setSelectedDomains] = useState(new Set());
 
+  // Debug: Log user data when component mounts or user changes
+  useEffect(() => {
+    console.log("🧑‍💻 DomainSearch - Current user state:", user);
+  }, [user]);
+
   const handleSearch = async (e) => {
     e.preventDefault();
     if (!searchTerm.trim()) return;
@@ -112,7 +117,7 @@ const DomainSearch = () => {
 
   const handlePurchase = async (domainName) => {
     // Check if profile is complete before proceeding
-    const canProceed = checkProfileAndProceed(() => {
+    const canProceed = await checkProfileAndProceed(() => {
       proceedWithPurchase(domainName);
     }, domainName);
 

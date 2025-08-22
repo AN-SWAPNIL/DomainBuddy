@@ -469,24 +469,70 @@ class NamecheapService {
   }
 
   getDefaultPrice(domainName) {
-    // Default pricing based on TLD
+    // Comprehensive pricing based on TLD - similar to Namecheap pricing structure
     console.log("Getting default price for domain:", domainName);
 
     const tld = domainName.split(".").pop().toLowerCase();
     const defaultPrices = {
+      // Popular extensions
       com: 12.99,
       net: 13.99,
       org: 13.99,
-      info: 11.99,
-      biz: 13.99,
       io: 49.99,
       co: 24.99,
+      
+      // Business & professional
+      biz: 13.99,
+      info: 11.99,
+      pro: 18.99,
+      name: 9.99,
+      mobi: 19.99,
+      
+      // Modern & tech extensions
       ai: 99.99,
       app: 18.99,
       dev: 12.99,
       tech: 49.99,
       online: 39.99,
+      site: 29.99,
       store: 59.99,
+      shop: 39.99,
+      
+      // Geographic & country codes
+      us: 8.99,
+      uk: 8.99,
+      ca: 14.99,
+      au: 13.99,
+      de: 8.99,
+      fr: 8.99,
+      it: 29.99,
+      es: 8.99,
+      nl: 9.99,
+      
+      // Creative & media
+      design: 49.99,
+      art: 14.99,
+      photo: 29.99,
+      video: 24.99,
+      music: 14.99,
+      blog: 29.99,
+      news: 24.99,
+      
+      // Industry specific
+      agency: 24.99,
+      consulting: 34.99,
+      marketing: 34.99,
+      finance: 54.99,
+      legal: 54.99,
+      health: 79.99,
+      
+      // Newer popular extensions
+      xyz: 13.99,
+      top: 9.99,
+      click: 9.99,
+      link: 9.99,
+      download: 24.99,
+      email: 54.99,
       website: 24.99,
     };
 

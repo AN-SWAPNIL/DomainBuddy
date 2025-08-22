@@ -291,17 +291,59 @@ const DomainSearch = () => {
         {/* Search Results */}
         {searchResults.length > 0 && (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Search Results
-            </h2>
-            <div className="grid gap-4">
-              {searchResults.map((domain, index) => (
-                <DomainCard
-                  key={index}
-                  domain={domain}
-                  onPurchase={handlePurchase}
-                />
-              ))}
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Search Results ({searchResults.length} domains found)
+              </h2>
+              {searchResults.length > 10 && (
+                <div className="text-sm text-gray-500">
+                  Showing comprehensive results like Namecheap for "{searchTerm}"
+                </div>
+              )}
+            </div>
+            
+            {/* Results Grid - organized by availability and price */}
+            <div className="space-y-6">
+              {/* Available Domains Section */}
+              {searchResults.filter(domain => domain.available).length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium text-green-700 mb-3">
+                    Available Domains ({searchResults.filter(domain => domain.available).length})
+                  </h3>
+                  <div className="grid gap-4">
+                    {searchResults
+                      .filter(domain => domain.available)
+                      .sort((a, b) => a.price - b.price) // Sort by price
+                      .map((domain, index) => (
+                        <DomainCard
+                          key={`available-${domain.name}-${index}`}
+                          domain={domain}
+                          onPurchase={handlePurchase}
+                        />
+                      ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Unavailable Domains Section */}
+              {searchResults.filter(domain => !domain.available).length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium text-gray-600 mb-3">
+                    Unavailable Domains ({searchResults.filter(domain => !domain.available).length})
+                  </h3>
+                  <div className="grid gap-4">
+                    {searchResults
+                      .filter(domain => !domain.available)
+                      .map((domain, index) => (
+                        <DomainCard
+                          key={`unavailable-${domain.name}-${index}`}
+                          domain={domain}
+                          onPurchase={handlePurchase}
+                        />
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

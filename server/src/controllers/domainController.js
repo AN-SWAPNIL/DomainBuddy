@@ -70,9 +70,27 @@ const searchDomains = async (req, res, next) => {
       });
     }
 
-    const { q: query, extensions = [".com", ".net", ".org"] } = req.query;
+    // Comprehensive extension list similar to Namecheap's domain search
+    const namecheapStyleExtensions = [
+      // Most popular extensions (top tier)
+      ".com", ".net", ".org", ".io", ".co", 
+      // Business & professional
+      ".biz", ".info", ".pro", ".name", ".mobi",
+      // Modern & tech extensions
+      ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store", ".shop",
+      // Geographic & country
+      ".us", ".uk", ".ca", ".au", ".de", ".fr", ".it", ".es", ".nl",
+      // Creative & media
+      ".design", ".art", ".photo", ".video", ".music", ".blog", ".news",
+      // Industry specific
+      ".agency", ".consulting", ".marketing", ".finance", ".legal", ".health",
+      // Newer popular extensions
+      ".xyz", ".top", ".click", ".link", ".download", ".email", ".website"
+    ];
 
-    console.log(`🔍 Searching domains for: ${query} with extensions: ${extensions}`);
+    const { q: query, extensions = namecheapStyleExtensions } = req.query;
+
+    console.log(`🔍 Searching domains for: ${query} with ${extensions.length} extensions`);
 
     // Basic domain search
     const searchResults = [];
@@ -80,8 +98,8 @@ const searchDomains = async (req, res, next) => {
       ? extensions
       : extensions.split(",");
 
-    // Limit extensions to prevent too many API calls
-    const limitedExtensions = extensionArray.slice(0, 5);
+    // Limit to 25 extensions for performance but comprehensive coverage
+    const limitedExtensions = extensionArray.slice(0, 25);
 
     // Check availability for direct matches with Promise.allSettled for better error handling
     const domainChecks = limitedExtensions.map(async (ext) => {

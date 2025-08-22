@@ -31,14 +31,32 @@ export const domainService = {
       
       if (error.name === 'AbortError' || error.message.includes('timeout')) {
         console.warn("⏰ Domain search timed out, returning limited results");
-        // Return partial results instead of full mock data
-        const extensionArray = extensions.length > 0 ? extensions : [".com", ".net", ".org"];
-        const results = extensionArray.slice(0, 3).map((ext) => ({
+        // Return comprehensive results with popular extensions like Namecheap
+        const namecheapStyleExtensions = [
+          ".com", ".net", ".org", ".io", ".co", ".biz", ".info", ".pro",
+          ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store"
+        ];
+        const extensionArray = extensions.length > 0 ? extensions : namecheapStyleExtensions;
+        const results = extensionArray.slice(0, 15).map((ext) => ({
           domain: `${q}${ext}`,
           available: true, // Assume available for timeout cases
-          price: ext === '.com' ? 12.99 : ext === '.net' ? 13.99 : 14.99,
+          price: ext === '.com' ? 12.99 : 
+                 ext === '.net' ? 13.99 : 
+                 ext === '.org' ? 14.99 :
+                 ext === '.io' ? 49.99 :
+                 ext === '.co' ? 24.99 :
+                 ext === '.ai' ? 99.99 :
+                 ext === '.app' ? 18.99 :
+                 ext === '.dev' ? 12.99 :
+                 ext === '.tech' ? 49.99 :
+                 ext === '.online' ? 39.99 :
+                 ext === '.site' ? 29.99 :
+                 ext === '.store' ? 59.99 :
+                 ext === '.biz' ? 13.99 :
+                 ext === '.info' ? 11.99 :
+                 ext === '.pro' ? 18.99 : 15.99,
           currency: "USD",
-          isPremium: false,
+          isPremium: ['.ai', '.io', '.tech', '.store'].includes(ext),
           message: "Check availability - service was slow to respond",
           timeout: true
         }));
@@ -50,13 +68,36 @@ export const domainService = {
       }
       
       console.warn("API not available, returning mock data");
-      // Reduced mock data for better performance
-      const extensionArray = extensions.length > 0 ? extensions : [".com", ".net", ".org"];
-      const directMatches = extensionArray.slice(0, 5).map((ext) => ({
+      // Comprehensive mock data similar to Namecheap search results
+      const namecheapStyleExtensions = [
+        ".com", ".net", ".org", ".io", ".co", ".biz", ".info", ".pro", ".name",
+        ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store", ".shop",
+        ".us", ".uk", ".ca", ".design", ".xyz"
+      ];
+      const extensionArray = extensions.length > 0 ? extensions : namecheapStyleExtensions;
+      const directMatches = extensionArray.slice(0, 20).map((ext) => ({
         domain: `${q}${ext}`,
         available: Math.random() > 0.5,
-        price: Math.floor(Math.random() * 30) + 10,
-        premium: Math.random() > 0.8,
+        price: ext === '.com' ? 12.99 : 
+               ext === '.net' ? 13.99 : 
+               ext === '.org' ? 14.99 :
+               ext === '.io' ? 49.99 :
+               ext === '.co' ? 24.99 :
+               ext === '.ai' ? 99.99 :
+               ext === '.app' ? 18.99 :
+               ext === '.dev' ? 12.99 :
+               ext === '.tech' ? 49.99 :
+               ext === '.online' ? 39.99 :
+               ext === '.site' ? 29.99 :
+               ext === '.store' ? 59.99 :
+               ext === '.biz' ? 13.99 :
+               ext === '.info' ? 11.99 :
+               ext === '.pro' ? 18.99 :
+               ext === '.us' ? 8.99 :
+               ext === '.uk' ? 8.99 :
+               ext === '.design' ? 49.99 :
+               ext === '.xyz' ? 13.99 : Math.floor(Math.random() * 30) + 10,
+        premium: ['.ai', '.io', '.tech', '.store', '.design'].includes(ext) || Math.random() > 0.8,
         registrar: "Namecheap",
         description: `Perfect domain for your ${q} business`,
       }));

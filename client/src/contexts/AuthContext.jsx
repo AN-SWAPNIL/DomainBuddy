@@ -166,13 +166,10 @@ export const AuthProvider = ({ children }) => {
       const response = await authService.register(userData);
       console.log("🔍 AuthContext register response:", response);
 
-      // Extract user from nested response structure
-      const userResponse = response.success ? response.data : response;
-
-      dispatch({
-        type: AuthActionTypes.LOGIN_SUCCESS,
-        payload: userResponse, // This contains both user and token
-      });
+      // For registration, we don't automatically log the user in
+      // They should go to login page instead
+      dispatch({ type: AuthActionTypes.SET_LOADING, payload: false });
+      
       return response;
     } catch (error) {
       const errorMessage =

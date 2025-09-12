@@ -24,16 +24,10 @@ export const authService = {
     const response = await api.post("/auth/register", userData);
     console.log("🔍 Register response:", response.data);
 
-    // The token is nested in response.data.data.token
-    if (response.data.success && response.data.data.token) {
-      localStorage.setItem("token", response.data.data.token);
-      console.log(
-        "✅ Token saved to localStorage:",
-        response.data.data.token.substring(0, 20) + "..."
-      );
-    } else {
-      console.error("❌ No token found in register response");
-    }
+    // For registration, we don't automatically save the token
+    // User should log in separately after registration
+    console.log("✅ Registration successful, user should log in separately");
+    
     return response.data;
   },
 

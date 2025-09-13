@@ -2,20 +2,20 @@ const { validationResult } = require("express-validator");
 const namecheapService = require("../services/namecheapService.js");
 const supabase = require("../config/database.js");
 
-// Cleanup function to delete pending domains/transactions after 1 minute
+// Cleanup function to delete pending domains/transactions after 3 minutes
 const cleanupPendingRecords = async () => {
   try {
-    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    const threeMinutesAgo = new Date(Date.now() - 180 * 1000).toISOString();
 
-    console.log(`🧹 Starting cleanup for records older than: ${oneMinuteAgo}`);
+    console.log(`🧹 Starting cleanup for records older than: ${threeMinutesAgo}`);
 
-    // First, delete all pending transactions older than 1 minute
+    // First, delete all pending transactions older than 3 minutes
     const { data: expiredTransactions, error: transactionError } =
       await supabase
         .from("transactions")
         .delete()
         .eq("status", "pending")
-        .lt("created_at", oneMinuteAgo)
+        .lt("created_at", threeMinutesAgo)
         .select("id, domain_id");
 
     if (transactionError) {
@@ -26,12 +26,12 @@ const cleanupPendingRecords = async () => {
       );
     }
 
-    // Then, delete all pending domains older than 1 minute (regardless of transaction status)
+    // Then, delete all pending domains older than 3 minutes (regardless of transaction status)
     const { data: expiredDomains, error: domainError } = await supabase
       .from("domains")
       .delete()
       .eq("status", "pending")
-      .lt("created_at", oneMinuteAgo)
+      .lt("created_at", threeMinutesAgo)
       .select("id, full_domain");
 
     if (domainError) {

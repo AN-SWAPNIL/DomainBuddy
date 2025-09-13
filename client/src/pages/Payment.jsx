@@ -17,7 +17,9 @@ import {
   XCircleIcon,
 } from "@heroicons/react/24/outline";
 import { paymentService } from "../services/paymentService";
+import { otpService } from "../services/otpService";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
+import OTPModal from "../components/ui/OTPModal";
 
 // Initialize Stripe
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
@@ -31,6 +33,13 @@ const PaymentForm = ({ domain, amount, onSuccess, onError }) => {
   const [billingEmail, setBillingEmail] = useState("");
   const [country, setCountry] = useState("US");
   const [postalCode, setPostalCode] = useState("");
+  
+  // OTP states
+  const [showOTPModal, setShowOTPModal] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
+  const [verifiedPaymentData, setVerifiedPaymentData] = useState(null);
+  const [otpTimeRemaining, setOtpTimeRemaining] = useState(0);
 
   useEffect(() => {
     // Create payment intent when component mounts
@@ -70,11 +79,99 @@ const PaymentForm = ({ domain, amount, onSuccess, onError }) => {
       return;
     }
 
+    // If we have verified payment data, proceed with payment
+    if (verifiedPaymentData) {
+      await processPayment();
+      return;
+    }
+
+    // Otherwise, start OTP verification process
+    await initiateOTPVerification();
+  };
+
+  const initiateOTPVerification = async () => {
+    try {
+      setOtpLoading(true);
+      setOtpError("");
+
+      const paymentData = {
+        cardholderName,
+        billingEmail,
+        country,
+        postalCode,
+        domain,
+        amount,
+        paymentIntentId: paymentIntent.id,
+      };
+
+      const result = await otpService.generateOTP(
+        billingEmail || "user@example.com", // Use billingEmail or fallback
+        paymentData,
+        domain
+      );
+
+      setOtpTimeRemaining(new Date(result.expiresAt).getTime());
+      setShowOTPModal(true);
+    } catch (error) {
+      console.error("Error initiating OTP verification:", error);
+      onError(error.message || "Failed to send verification code");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleOTPVerify = async (otpCode) => {
+    try {
+      setOtpLoading(true);
+      setOtpError("");
+
+      console.log("🔍 Frontend: Starting OTP verification", {
+        email: billingEmail || "user@example.com",
+        otpCode,
+      });
+
+      const result = await otpService.verifyOTP(
+        billingEmail || "user@example.com",
+        otpCode
+      );
+
+      console.log("🔍 Frontend: OTP verification successful", result);
+
+      setVerifiedPaymentData(result.paymentData);
+      setShowOTPModal(false);
+      
+      console.log("🔍 Frontend: Starting payment processing...");
+      
+      // Automatically proceed with payment after verification
+      await processPayment();
+    } catch (error) {
+      console.error("❌ Frontend: Error verifying OTP:", error);
+      setOtpError(error.message || "Verification failed");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleOTPResend = async () => {
+    try {
+      const result = await otpService.resendOTP(billingEmail || "user@example.com");
+      setOtpTimeRemaining(new Date(result.expiresAt).getTime());
+      setOtpError("");
+    } catch (error) {
+      console.error("Error resending OTP:", error);
+      setOtpError(error.message || "Failed to resend verification code");
+    }
+  };
+
+  const processPayment = async () => {
+    console.log("🔍 Frontend: Processing payment...");
     setProcessing(true);
 
     const cardNumberElement = elements.getElement(CardNumberElement);
 
     try {
+      console.log("🔍 Frontend: Confirming payment with Stripe...");
+      
       // Confirm payment with Stripe
       const { error, paymentIntent: confirmedPayment } =
         await stripe.confirmCardPayment(paymentIntent.clientSecret, {
@@ -92,15 +189,19 @@ const PaymentForm = ({ domain, amount, onSuccess, onError }) => {
         });
 
       if (error) {
-        console.error("Payment error:", error);
+        console.error("❌ Frontend: Payment error:", error);
         onError(error.message);
       } else if (confirmedPayment.status === "succeeded") {
+        console.log("🔍 Frontend: Payment confirmed with Stripe, confirming with backend...");
+        
         // Confirm payment with our backend
         await paymentService.confirmPayment(confirmedPayment.id);
+        
+        console.log("🔍 Frontend: Payment confirmed with backend, calling onSuccess...");
         onSuccess(confirmedPayment);
       }
     } catch (error) {
-      console.error("Payment confirmation error:", error);
+      console.error("❌ Frontend: Payment confirmation error:", error);
       onError("Payment failed. Please try again.");
     } finally {
       setProcessing(false);
@@ -125,7 +226,8 @@ const PaymentForm = ({ domain, amount, onSuccess, onError }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <>
+      <form onSubmit={handleSubmit} className="space-y-6">
       {/* Payment Summary */}
       <div className="bg-gradient-to-r from-primary-50 to-blue-50 border border-primary-200 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-3">
@@ -348,9 +450,31 @@ const PaymentForm = ({ domain, amount, onSuccess, onError }) => {
       </div>
 
       {/* Security Notice */}
-      <div className="flex items-center space-x-2 text-sm text-gray-600">
-        <LockClosedIcon className="h-4 w-4" />
-        <span>Your payment information is secure and encrypted</span>
+      <div className="space-y-2">
+        <div className="flex items-center space-x-2 text-sm text-gray-600">
+          <LockClosedIcon className="h-4 w-4" />
+          <span>Your payment information is secure and encrypted</span>
+        </div>
+        {!verifiedPaymentData && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="flex items-center space-x-2 text-sm text-blue-800">
+              <span>🔐</span>
+              <span>
+                For your security, we'll send a verification code to your email before processing the payment.
+              </span>
+            </div>
+          </div>
+        )}
+        {verifiedPaymentData && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <div className="flex items-center space-x-2 text-sm text-green-800">
+              <span>✅</span>
+              <span>
+                Email verified! Your payment will be processed securely.
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Submit Button */}
@@ -359,6 +483,7 @@ const PaymentForm = ({ domain, amount, onSuccess, onError }) => {
         disabled={
           !stripe ||
           processing ||
+          otpLoading ||
           !paymentIntent ||
           !cardholderName.trim() ||
           !postalCode.trim()
@@ -370,14 +495,38 @@ const PaymentForm = ({ domain, amount, onSuccess, onError }) => {
             <LoadingSpinner size="sm" className="text-white" />
             <span>Processing Payment...</span>
           </>
+        ) : otpLoading ? (
+          <>
+            <LoadingSpinner size="sm" className="text-white" />
+            <span>Sending Verification Code...</span>
+          </>
+        ) : verifiedPaymentData ? (
+          <>
+            <CreditCardIcon className="h-5 w-5" />
+            <span>Complete Payment ${amount.toFixed(2)}</span>
+          </>
         ) : (
           <>
             <CreditCardIcon className="h-5 w-5" />
-            <span>Pay ${amount.toFixed(2)} Now</span>
+            <span>Send Verification Code</span>
           </>
         )}
       </button>
-    </form>
+      </form>
+
+      {/* OTP Modal - Moved outside form to prevent nested form issues */}
+      <OTPModal
+        isOpen={showOTPModal}
+        onClose={() => setShowOTPModal(false)}
+        onVerify={handleOTPVerify}
+        onResend={handleOTPResend}
+        email={billingEmail || "user@example.com"}
+        domainName={domain}
+        loading={otpLoading}
+        error={otpError}
+        timeRemaining={otpTimeRemaining}
+      />
+    </>
   );
 };
 

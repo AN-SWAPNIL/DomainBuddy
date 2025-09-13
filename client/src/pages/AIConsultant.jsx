@@ -85,6 +85,8 @@ const AIConsultant = () => {
 
       // Debug: Log the complete response
       console.log("🔍 Complete AI Response:", response);
+      console.log("🔍 Response.requiresPaymentDetails:", response.requiresPaymentDetails);
+      console.log("🔍 Response.paymentCompleted:", response.paymentCompleted);
       console.log("🔍 Response.redirectToPayment:", response.redirectToPayment);
       console.log("🔍 Response.requiresPayment:", response.requiresPayment);
       console.log("🔍 Response.paymentUrl:", response.paymentUrl);
@@ -97,6 +99,10 @@ const AIConsultant = () => {
         timestamp: new Date(),
         suggestions: response.suggestions || [],
         domains: response.domains || [],
+        // Add payment-related fields
+        requiresPaymentDetails: response.requiresPaymentDetails,
+        paymentCompleted: response.paymentCompleted,
+        awaitingPaymentDetails: response.requiresPaymentDetails && !response.paymentCompleted
       };
 
       setMessages((prev) => [...prev, aiMessage]);
@@ -105,7 +111,25 @@ const AIConsultant = () => {
         setSuggestions(response.suggestions);
       }
 
-      // Handle automatic redirection to payment page
+      // Handle payment completion success
+      if (response.paymentCompleted) {
+        console.log("🎉 Payment completed successfully!");
+        // Show success message and redirect to domains page after delay
+        setTimeout(() => {
+          navigate("/my-domains");
+        }, 3000);
+        return; // Don't process any redirect logic
+      }
+
+      // Handle payment details request - no redirection, just show the message
+      if (response.requiresPaymentDetails) {
+        console.log("💳 AI is requesting payment details from user");
+        // The AI message already contains instructions for the user
+        // No redirection needed - user will provide details in next message
+        return;
+      }
+
+      // Legacy handling: automatic redirection to payment page (for backward compatibility)
       if (response.redirectToPayment && response.paymentUrl) {
         console.log("🔄 Redirecting to payment page:", response.paymentUrl);
         // Add a small delay to show the message before redirecting
@@ -130,6 +154,8 @@ const AIConsultant = () => {
         }, 2000);
       } else {
         console.log("❌ No redirection triggered. Response flags:", {
+          requiresPaymentDetails: response.requiresPaymentDetails,
+          paymentCompleted: response.paymentCompleted,
           redirectToPayment: response.redirectToPayment,
           requiresPayment: response.requiresPayment,
           hasPaymentUrl: !!response.paymentUrl,
@@ -331,6 +357,34 @@ const AIConsultant = () => {
             }`}
           >
             <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+
+            {/* Payment Details Request Indicator */}
+            {message.awaitingPaymentDetails && (
+              <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-center space-x-2 text-sm text-blue-800">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  <span className="font-medium">Waiting for payment details...</span>
+                </div>
+                <div className="text-xs text-blue-600 mt-1">
+                  Please provide your payment information in the format shown above
+                </div>
+              </div>
+            )}
+
+            {/* Payment Completion Indicator */}
+            {message.paymentCompleted && (
+              <div className="mt-3 bg-green-50 border border-green-200 rounded-lg p-3">
+                <div className="flex items-center space-x-2 text-sm text-green-800">
+                  <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-xs">✓</span>
+                  </div>
+                  <span className="font-medium">Payment processed successfully!</span>
+                </div>
+                <div className="text-xs text-green-600 mt-1">
+                  Redirecting to your domains page...
+                </div>
+              </div>
+            )}
 
             {/* Payment Redirection Indicator */}
             {message.content.includes(

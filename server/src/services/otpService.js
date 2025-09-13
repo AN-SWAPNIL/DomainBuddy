@@ -3,7 +3,7 @@ const emailService = require('./emailService');
 
 class OTPService {
   constructor() {
-    this.OTP_EXPIRY_MINUTES = 10; // OTP expires in 10 minutes
+    this.OTP_EXPIRY_MINUTES = 3; // OTP expires in 3 minutes
     this.MAX_ATTEMPTS = 3; // Maximum attempts allowed
   }
 

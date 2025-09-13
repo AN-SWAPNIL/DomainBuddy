@@ -295,7 +295,7 @@ const OTPModal = ({
               {/* Help text */}
               <div className="mt-6 text-xs text-gray-500 text-center">
                 <p>Check your spam folder if you don't see the email.</p>
-                <p>The verification code is valid for 10 minutes.</p>
+                <p>The verification code is valid for 3 minutes.</p>
               </div>
             </div>
           </motion.div>

@@ -144,7 +144,7 @@ class EmailService {
           <div class="otp-container">
             <p><strong>Your Verification Code:</strong></p>
             <div class="otp-code">${otp}</div>
-            <p><small>This code expires in 10 minutes</small></p>
+            <p><small>This code expires in 3 minutes</small></p>
           </div>
           
           <div class="domain-info">
@@ -159,7 +159,7 @@ class EmailService {
             <ul>
               <li>Never share this OTP with anyone</li>
               <li>DomainBuddy will never ask for your OTP via phone or email</li>
-              <li>This code expires in 10 minutes for your security</li>
+              <li>This code expires in 3 minutes for your security</li>
               <li>If you didn't initiate this purchase, please ignore this email</li>
             </ul>
           </div>
@@ -187,7 +187,7 @@ You've initiated a domain purchase for ${domainName}. To complete your purchase 
 
 Verification Code: ${otp}
 
-This code expires in 10 minutes.
+This code expires in 3 minutes.
 
 Purchase Details:
 - Domain: ${domainName}
@@ -197,7 +197,7 @@ Purchase Details:
 Security Notice:
 - Never share this OTP with anyone
 - DomainBuddy will never ask for your OTP via phone or email
-- This code expires in 10 minutes for your security
+- This code expires in 3 minutes for your security
 - If you didn't initiate this purchase, please ignore this email
 
 If you have any questions or need assistance, please contact our support team.

@@ -14,6 +14,7 @@ const aiRoutes = require("./routes/ai");
 const otpRoutes = require("./routes/otp");
 const { errorHandler } = require("./middleware/errorHandler");
 const { notFound } = require("./middleware/notFound");
+const dnsBackgroundService = require("./services/dnsBackgroundService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -129,6 +130,14 @@ app.listen(PORT, () => {
   );
   console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  
+  // Start DNS background service
+  try {
+    dnsBackgroundService.start();
+    console.log("🌐 DNS background service started");
+  } catch (error) {
+    console.error("❌ Failed to start DNS background service:", error);
+  }
 });
 
 module.exports = app;

@@ -22,6 +22,7 @@ import Dashboard from "./pages/Dashboard";
 import DomainSearch from "./pages/DomainSearch";
 import AIConsultant from "./pages/AIConsultant";
 import MyDomains from "./pages/MyDomains";
+import DomainDetails from "./pages/DomainDetails";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Payment from "./pages/Payment";
@@ -84,6 +85,14 @@ function App() {
                     element={
                       <ProtectedRoute>
                         <MyDomains />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/domains/:id"
+                    element={
+                      <ProtectedRoute>
+                        <DomainDetails />
                       </ProtectedRoute>
                     }
                   />

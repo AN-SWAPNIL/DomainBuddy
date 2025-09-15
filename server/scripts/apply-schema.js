@@ -25,30 +25,54 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 
 async function applySchema() {
   try {
-    console.log("🔄 Reading schema file...");
+    console.log("🔄 Reading schema files...");
 
-    // Read the schema file
+    // Read the main schema file
     const schemaPath = path.join(__dirname, "..", "database", "schema.sql");
     const schema = fs.readFileSync(schemaPath, "utf8");
 
-    console.log("📝 Schema file loaded successfully");
-    console.log("🚀 Applying schema to Supabase database...");
+    // Read the subdomain schema file
+    const subdomainSchemaPath = path.join(__dirname, "..", "database", "subdomain_schema.sql");
+    let subdomainSchema = '';
+    if (fs.existsSync(subdomainSchemaPath)) {
+      subdomainSchema = fs.readFileSync(subdomainSchemaPath, "utf8");
+      console.log("📝 Subdomain schema file loaded");
+    } else {
+      console.log("⚠️  Subdomain schema file not found, skipping");
+    }
 
-    // Execute the schema
+    console.log("📝 Schema files loaded successfully");
+    console.log("🚀 Applying main schema to Supabase database...");
+
+    // Execute the main schema
     const { data, error } = await supabase.rpc("exec_sql", { sql: schema });
 
     if (error) {
-      console.error("❌ Error applying schema:", error);
+      console.error("❌ Error applying main schema:", error);
       return;
     }
 
-    console.log("✅ Schema applied successfully!");
+    console.log("✅ Main schema applied successfully!");
+
+    // Apply subdomain schema if it exists
+    if (subdomainSchema) {
+      console.log("🚀 Applying subdomain schema...");
+      const { data: subData, error: subError } = await supabase.rpc("exec_sql", { sql: subdomainSchema });
+
+      if (subError) {
+        console.error("❌ Error applying subdomain schema:", subError);
+      } else {
+        console.log("✅ Subdomain schema applied successfully!");
+      }
+    }
+
     console.log("🔍 Verifying tables...");
 
     // Verify tables exist
     const tables = [
       "users",
       "domains",
+      "subdomains",
       "transactions",
       "refresh_tokens",
       "password_resets",
@@ -99,6 +123,23 @@ async function applySchema() {
       console.log(
         "✅ stripe_payment_intent_id column exists in transactions table"
       );
+    }
+
+    // Check subdomain table structure
+    if (subdomainSchema) {
+      const { data: subdomainData, error: subdomainError } = await supabase
+        .from("subdomains")
+        .select("id, domain_id, subdomain_name, record_type")
+        .limit(1);
+
+      if (subdomainError) {
+        console.log(
+          "⚠️  subdomain table structure:",
+          subdomainError.message
+        );
+      } else {
+        console.log("✅ subdomains table structure is correct");
+      }
     }
 
     console.log("🎉 Schema verification complete!");

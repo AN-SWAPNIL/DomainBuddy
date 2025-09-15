@@ -90,6 +90,21 @@ const MyDomains = () => {
     return matchesSearch && matchesFilter;
   });
 
+  const getDomainStatus = (expirationDate) => {
+    const now = new Date();
+    const expiry = new Date(expirationDate);
+    const diffTime = expiry - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 30) {
+      return "active";
+    } else if (diffDays > 0 && diffDays <= 30) {
+      return "expiring";
+    } else {
+      return "expired";
+    }
+  }
+
   const getDomainStatusColor = (status) => {
     switch (status) {
       case "active":
@@ -116,7 +131,7 @@ const MyDomains = () => {
   };
 
   const DomainCard = ({ domain }) => {
-    const StatusIcon = getDomainStatusIcon(domain.status);
+    const StatusIcon = getDomainStatusIcon(getDomainStatus(domain.expiration_date));
     const expiryDate = new Date(domain.expiration_date);
     const daysUntilExpiry = Math.ceil(
       (expiryDate - new Date()) / (1000 * 60 * 60 * 24)
@@ -135,13 +150,13 @@ const MyDomains = () => {
             </div>
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                {domain.name}
+                {domain.name + "." + domain.extension}
               </h3>
               <div className="flex items-center space-x-2 mt-1">
                 <StatusIcon className="h-4 w-4" />
                 <span
                   className={`text-xs font-medium px-2 py-1 rounded-full ${getDomainStatusColor(
-                    domain.status
+                    getDomainStatus(domain.expiration_date)
                   )}`}
                 >
                   {domain.status.charAt(0).toUpperCase() +
@@ -471,7 +486,7 @@ const MyDomains = () => {
               </div>
               <div className="ml-4">
                 <div className="text-2xl font-bold text-gray-900">
-                  {domains.filter((d) => d.status === "active").length}
+                  {domains.filter((d) => getDomainStatus(d.expiration_date) === "active").length}
                 </div>
                 <div className="text-sm text-gray-600">Active</div>
               </div>
@@ -485,7 +500,7 @@ const MyDomains = () => {
               </div>
               <div className="ml-4">
                 <div className="text-2xl font-bold text-gray-900">
-                  {domains.filter((d) => d.status === "expiring").length}
+                  {domains.filter((d) => getDomainStatus(d.expirationDate) === "expiring").length}
                 </div>
                 <div className="text-sm text-gray-600">Expiring Soon</div>
               </div>

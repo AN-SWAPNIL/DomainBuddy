@@ -56,7 +56,7 @@ export const validateProfileCompleteness = (user) => {
 };
 
 // Profile completeness hook for React components
-export const useProfileCheck = (user, navigate) => {
+export const useProfileCheck = (user, navigate, onShowProfileModal = null) => {
   const checkProfileAndProceed = async (onSuccess, domain = "") => {
     try {
       // First, try to get fresh user data from the AuthContext if available
@@ -91,18 +91,28 @@ export const useProfileCheck = (user, navigate) => {
       const validation = validateProfileCompleteness(currentUser);
       
       if (!validation.isComplete) {
-        // Show more user-friendly notification about incomplete profile
-        const domainText = domain ? ` for "${domain}"` : "";
-        const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
-          ", "
-        )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
+        // Use modal if available, otherwise fallback to window.confirm
+        if (onShowProfileModal) {
+          onShowProfileModal({
+            domain,
+            missingFields: validation.missingFields,
+            onConfirm: () => navigate("/settings")
+          });
+          return false;
+        } else {
+          // Fallback to window.confirm for backward compatibility
+          const domainText = domain ? ` for "${domain}"` : "";
+          const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
+            ", "
+          )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
 
-        if (window.confirm(message)) {
-          // Redirect to profile page
-          navigate("/profile");
+          if (window.confirm(message)) {
+            // Redirect to profile page
+            navigate("/profile");
+            return false;
+          }
           return false;
         }
-        return false;
       }
 
       // Profile is complete, proceed with the action
@@ -118,16 +128,27 @@ export const useProfileCheck = (user, navigate) => {
       const validation = validateProfileCompleteness(user);
       
       if (!validation.isComplete) {
-        const domainText = domain ? ` for "${domain}"` : "";
-        const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
-          ", "
-        )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
+        // Use modal if available, otherwise fallback to window.confirm
+        if (onShowProfileModal) {
+          onShowProfileModal({
+            domain,
+            missingFields: validation.missingFields,
+            onConfirm: () => navigate("/profile")
+          });
+          return false;
+        } else {
+          // Fallback to window.confirm for backward compatibility
+          const domainText = domain ? ` for "${domain}"` : "";
+          const message = `Complete Your Profile Required\n\nTo proceed with your domain purchase${domainText}, please complete your profile first.\n\nMissing information: ${validation.missingFields.join(
+            ", "
+          )}\n\nClick OK to go to your profile page, or Cancel to stay here.`;
 
-        if (window.confirm(message)) {
-          navigate("/profile");
+          if (window.confirm(message)) {
+            navigate("/profile");
+            return false;
+          }
           return false;
         }
-        return false;
       }
 
       if (onSuccess) {

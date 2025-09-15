@@ -102,7 +102,10 @@ const AIConsultant = () => {
         // Add payment-related fields
         requiresPaymentDetails: response.requiresPaymentDetails,
         paymentCompleted: response.paymentCompleted,
-        awaitingPaymentDetails: response.requiresPaymentDetails && !response.paymentCompleted
+        awaitingPaymentDetails: response.requiresPaymentDetails && !response.paymentCompleted,
+        // Add profile update related fields
+        requiresProfileUpdate: response.requiresProfileUpdate,
+        missingFields: response.missingFields || []
       };
 
       setMessages((prev) => [...prev, aiMessage]);
@@ -357,6 +360,31 @@ const AIConsultant = () => {
             }`}
           >
             <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+
+            {/* Profile Update Required */}
+            {message.requiresProfileUpdate && (
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0">
+                    <UserIcon className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-amber-800">
+                      Profile Update Required
+                    </div>
+                    <div className="text-sm text-amber-700 mt-1">
+                      Complete your profile to proceed with the domain purchase.
+                    </div>
+                    <button
+                      onClick={() => navigate("/settings")}
+                      className="mt-3 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                    >
+                      Update Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Payment Details Request Indicator */}
             {message.awaitingPaymentDetails && (

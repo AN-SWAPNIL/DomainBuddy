@@ -83,12 +83,12 @@ class OTPService {
       // Clean up expired OTPs first
       await this.cleanupExpiredOTPs();
 
-      // First, let's try to find the OTP record with more flexible matching
-      // Try exact match first
+      // First, try to find OTP by user_id and code (regardless of email)
+      // This allows verification even if payment email differs from account email
       let { data: otpRecord, error: findError } = await supabase
         .from('otp_verifications')
         .select('*')
-        .eq('email', email.toLowerCase())
+        .eq('user_id', userId)
         .eq('otp_code', otpCode)
         .eq('verified', false)
         .gt('expires_at', new Date().toISOString())
@@ -96,49 +96,50 @@ class OTPService {
         .limit(1)
         .single();
 
-      console.log('🔍 OTP lookup result (email + code):', { otpRecord, findError });
+      console.log('🔍 OTP lookup result (user_id + code):', { otpRecord, findError });
 
-      // If not found, try with user_id as well
+      // If not found by user_id, try with email match as fallback
       if (findError || !otpRecord) {
-        const { data: otpRecordWithUser, error: findWithUserError } = await supabase
+        const { data: otpRecordWithEmail, error: findWithEmailError } = await supabase
           .from('otp_verifications')
           .select('*')
-          .eq('user_id', userId)
           .eq('email', email.toLowerCase())
           .eq('otp_code', otpCode)
           .eq('verified', false)
           .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
+          .limit(1)
           .single();
 
-        console.log('🔍 OTP lookup with user_id:', { otpRecordWithUser, findWithUserError });
+        console.log('🔍 OTP lookup with email:', { otpRecordWithEmail, findWithEmailError });
         
-        if (!findWithUserError && otpRecordWithUser) {
-          otpRecord = otpRecordWithUser;
+        if (!findWithEmailError && otpRecordWithEmail) {
+          otpRecord = otpRecordWithEmail;
           findError = null;
         }
       }
 
       if (findError || !otpRecord) {
-        // Let's check what OTPs exist for this email
-        const { data: allOTPs } = await supabase
+        // Let's check what OTPs exist for this user (debug info)
+        const { data: allUserOTPs } = await supabase
           .from('otp_verifications')
           .select('*')
-          .eq('email', email.toLowerCase())
+          .eq('user_id', userId)
           .order('created_at', { ascending: false })
           .limit(5);
         
-        console.log('🔍 All OTPs for email:', allOTPs);
+        console.log('🔍 All OTPs for user:', allUserOTPs);
 
-        // Check if there's any valid OTP for this email (regardless of user_id)
-        const validOTPForEmail = allOTPs?.find(otp => 
+        // Check if there's any valid OTP for this user with the code (regardless of email)
+        const validOTPForUser = allUserOTPs?.find(otp => 
           otp.otp_code === otpCode && 
           !otp.verified && 
           new Date(otp.expires_at) > new Date()
         );
 
-        if (validOTPForEmail) {
-          console.log('🔍 Found valid OTP for email, using it:', validOTPForEmail);
-          otpRecord = validOTPForEmail;
+        if (validOTPForUser) {
+          console.log('🔍 Found valid OTP for user, using it:', validOTPForUser);
+          otpRecord = validOTPForUser;
         } else {
           // Check for any unverified, non-expired OTP to increment attempts
           const { data: invalidOTP } = await supabase

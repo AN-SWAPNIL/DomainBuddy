@@ -1784,7 +1784,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       return {
         name: domainName,
         available: availability.available,
-        price: availability.price || 12.99
+        price: availability.price
       };
     } catch (error) {
       console.warn(`⚠️ Failed to check domain ${domainName}:`, error.message);

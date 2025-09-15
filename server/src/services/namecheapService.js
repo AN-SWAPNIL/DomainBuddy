@@ -823,6 +823,318 @@ class NamecheapService {
 
     return errors;
   }
+
+  // DNS Management Methods for Subdomain Creation
+
+  // Create a DNS record (A, CNAME, etc.)
+  async createDnsRecord(domainName, host, recordType, value, ttl = 3600) {
+    try {
+      console.log(`🌐 Creating DNS record: ${host}.${domainName} (${recordType}) -> ${value}`);
+      
+      // Split domain into SLD and TLD
+      const parts = domainName.split('.');
+      const tld = parts.pop();
+      const sld = parts.join('.');
+      
+      // Use environment IP or detect current IP
+      const clientIp = this.clientIp || (await this.getCurrentIP());
+
+      // First, get current host records
+      const getHostsParams = {
+        ApiUser: this.apiUser,
+        ApiKey: this.apiKey,
+        UserName: this.apiUser,
+        Command: "namecheap.domains.dns.getHosts",
+        ClientIp: clientIp,
+        SLD: sld,
+        TLD: tld
+      };
+
+      console.log(`📋 Getting current DNS records for ${sld}.${tld}`);
+      const hostsResponse = await axios.get(this.baseUrl, {
+        params: getHostsParams,
+        timeout: 30000
+      });
+
+      // Parse the XML response
+      const hostsResult = await this.parseXmlResponse(hostsResponse.data);
+      
+      // Check for errors in the response
+      if (!hostsResult?.ApiResponse?.CommandResponse?.[0]?.DomainDNSGetHostsResult?.[0]) {
+        console.error("❌ Failed to get current DNS records");
+        return { success: false, message: "Failed to get current DNS records" };
+      }
+
+      const currentHosts = hostsResult.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult[0].host || [];
+      
+      // Check if record already exists
+      const existingRecord = currentHosts.find(record => 
+        record.$.Name === host && record.$.Type === recordType
+      );
+
+      if (existingRecord) {
+        console.log(`⚠️ DNS record ${host} already exists with type ${recordType}`);
+        return { success: false, message: "DNS record already exists" };
+      }
+
+      // Prepare the new host record
+      const newHost = {
+        HostName: host,
+        RecordType: recordType,
+        Address: value,
+        TTL: ttl,
+        MXPref: recordType === 'MX' ? 10 : 0
+      };
+
+      // Add the new record to the current hosts
+      const hosts = currentHosts.map(record => ({
+        HostName: record.$.Name,
+        RecordType: record.$.Type,
+        Address: record.$.Address,
+        TTL: record.$.TTL,
+        MXPref: record.$.MXPref || 0
+      }));
+
+      hosts.push(newHost);
+
+      // Build parameters for setHosts
+      const setHostsParams = {
+        ApiUser: this.apiUser,
+        ApiKey: this.apiKey,
+        UserName: this.apiUser,
+        Command: "namecheap.domains.dns.setHosts",
+        ClientIp: clientIp,
+        SLD: sld,
+        TLD: tld
+      };
+
+      // Add host records to params
+      hosts.forEach((host, index) => {
+        setHostsParams[`HostName${index+1}`] = host.HostName;
+        setHostsParams[`RecordType${index+1}`] = host.RecordType;
+        setHostsParams[`Address${index+1}`] = host.Address;
+        setHostsParams[`TTL${index+1}`] = host.TTL;
+        if (host.RecordType === 'MX') {
+          setHostsParams[`MXPref${index+1}`] = host.MXPref;
+        }
+      });
+
+      console.log(`📝 Setting DNS records for ${sld}.${tld}`);
+      const setHostsResponse = await axios.get(this.baseUrl, {
+        params: setHostsParams,
+        timeout: 30000
+      });
+
+      // Parse the XML response
+      const setHostsResult = await this.parseXmlResponse(setHostsResponse.data);
+      
+      // Check for success in the response
+      if (setHostsResult?.ApiResponse?.$ && setHostsResult.ApiResponse.$.Status === "OK") {
+        console.log(`✅ Successfully created DNS record: ${host}.${domainName}`);
+        return { success: true };
+      } else {
+        console.error("❌ Failed to create DNS record");
+        return { success: false, message: "Failed to create DNS record" };
+      }
+    } catch (error) {
+      console.error("❌ Error creating DNS record:", error);
+      return { 
+        success: false, 
+        message: error.message || "An error occurred while creating the DNS record" 
+      };
+    }
+  }
+
+  // Delete a DNS record
+  async deleteDnsRecord(domainName, host, recordType) {
+    try {
+      console.log(`🗑️ Deleting DNS record: ${host}.${domainName} (${recordType})`);
+      
+      // Split domain into SLD and TLD
+      const parts = domainName.split('.');
+      const tld = parts.pop();
+      const sld = parts.join('.');
+      
+      // Use environment IP or detect current IP
+      const clientIp = this.clientIp || (await this.getCurrentIP());
+
+      // First, get current host records
+      const getHostsParams = {
+        ApiUser: this.apiUser,
+        ApiKey: this.apiKey,
+        UserName: this.apiUser,
+        Command: "namecheap.domains.dns.getHosts",
+        ClientIp: clientIp,
+        SLD: sld,
+        TLD: tld
+      };
+
+      console.log(`📋 Getting current DNS records for ${sld}.${tld}`);
+      const hostsResponse = await axios.get(this.baseUrl, {
+        params: getHostsParams,
+        timeout: 30000
+      });
+
+      // Parse the XML response
+      const hostsResult = await this.parseXmlResponse(hostsResponse.data);
+      
+      // Check for errors in the response
+      if (!hostsResult?.ApiResponse?.CommandResponse?.[0]?.DomainDNSGetHostsResult?.[0]) {
+        console.error("❌ Failed to get current DNS records");
+        return { success: false, message: "Failed to get current DNS records" };
+      }
+
+      const currentHosts = hostsResult.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult[0].host || [];
+      
+      // Filter out the record we want to delete
+      const filteredHosts = currentHosts.filter(record => 
+        !(record.$.Name === host && record.$.Type === recordType)
+      );
+      
+      // If no records were removed, the record didn't exist
+      if (filteredHosts.length === currentHosts.length) {
+        console.log(`⚠️ DNS record ${host} with type ${recordType} not found`);
+        return { success: true, message: "DNS record not found" };
+      }
+
+      // Prepare hosts for setHosts call
+      const hosts = filteredHosts.map(record => ({
+        HostName: record.$.Name,
+        RecordType: record.$.Type,
+        Address: record.$.Address,
+        TTL: record.$.TTL,
+        MXPref: record.$.MXPref || 0
+      }));
+
+      // Build parameters for setHosts
+      const setHostsParams = {
+        ApiUser: this.apiUser,
+        ApiKey: this.apiKey,
+        UserName: this.apiUser,
+        Command: "namecheap.domains.dns.setHosts",
+        ClientIp: clientIp,
+        SLD: sld,
+        TLD: tld
+      };
+
+      // Add host records to params
+      hosts.forEach((host, index) => {
+        setHostsParams[`HostName${index+1}`] = host.HostName;
+        setHostsParams[`RecordType${index+1}`] = host.RecordType;
+        setHostsParams[`Address${index+1}`] = host.Address;
+        setHostsParams[`TTL${index+1}`] = host.TTL;
+        if (host.RecordType === 'MX') {
+          setHostsParams[`MXPref${index+1}`] = host.MXPref;
+        }
+      });
+
+      console.log(`📝 Updating DNS records for ${sld}.${tld} (removing ${host})`);
+      const setHostsResponse = await axios.get(this.baseUrl, {
+        params: setHostsParams,
+        timeout: 30000
+      });
+
+      // Parse the XML response
+      const setHostsResult = await this.parseXmlResponse(setHostsResponse.data);
+      
+      // Check for success in the response
+      if (setHostsResult?.ApiResponse?.$ && setHostsResult.ApiResponse.$.Status === "OK") {
+        console.log(`✅ Successfully deleted DNS record: ${host}.${domainName}`);
+        return { success: true };
+      } else {
+        console.error("❌ Failed to delete DNS record");
+        return { success: false, message: "Failed to delete DNS record" };
+      }
+    } catch (error) {
+      console.error("❌ Error deleting DNS record:", error);
+      return { 
+        success: false, 
+        message: error.message || "An error occurred while deleting the DNS record" 
+      };
+    }
+  }
+
+  // Update a DNS record (delete old and create new)
+  async updateDnsRecord(domainName, host, recordType, newValue, newTtl, oldValue) {
+    try {
+      console.log(`✏️ Updating DNS record: ${host}.${domainName} (${recordType}) ${oldValue} -> ${newValue}`);
+      
+      // First delete the old record
+      const deleteResult = await this.deleteDnsRecord(domainName, host, recordType);
+      if (!deleteResult.success) {
+        return deleteResult;
+      }
+      
+      // Then create a new one with updated values
+      return await this.createDnsRecord(domainName, host, recordType, newValue, newTtl);
+    } catch (error) {
+      console.error("❌ Error updating DNS record:", error);
+      return { 
+        success: false, 
+        message: error.message || "An error occurred while updating the DNS record" 
+      };
+    }
+  }
+
+  // Get all DNS records for a domain
+  async getDnsRecords(domainName) {
+    try {
+      console.log(`📋 Getting DNS records for: ${domainName}`);
+      
+      // Split domain into SLD and TLD
+      const parts = domainName.split('.');
+      const tld = parts.pop();
+      const sld = parts.join('.');
+      
+      // Use environment IP or detect current IP
+      const clientIp = this.clientIp || (await this.getCurrentIP());
+
+      // Get current host records
+      const getHostsParams = {
+        ApiUser: this.apiUser,
+        ApiKey: this.apiKey,
+        UserName: this.apiUser,
+        Command: "namecheap.domains.dns.getHosts",
+        ClientIp: clientIp,
+        SLD: sld,
+        TLD: tld
+      };
+
+      const hostsResponse = await axios.get(this.baseUrl, {
+        params: getHostsParams,
+        timeout: 30000
+      });
+
+      // Parse the XML response
+      const hostsResult = await this.parseXmlResponse(hostsResponse.data);
+      
+      // Check for errors in the response
+      if (!hostsResult?.ApiResponse?.CommandResponse?.[0]?.DomainDNSGetHostsResult?.[0]) {
+        console.error("❌ Failed to get DNS records");
+        return { success: false, message: "Failed to get DNS records" };
+      }
+
+      const currentHosts = hostsResult.ApiResponse.CommandResponse[0].DomainDNSGetHostsResult[0].host || [];
+      
+      // Format the response
+      const records = currentHosts.map(record => ({
+        name: record.$.Name,
+        type: record.$.Type,
+        address: record.$.Address,
+        ttl: parseInt(record.$.TTL),
+        mxPref: record.$.MXPref ? parseInt(record.$.MXPref) : undefined
+      }));
+
+      console.log(`✅ Found ${records.length} DNS records for ${domainName}`);
+      return { success: true, records };
+    } catch (error) {
+      console.error("❌ Error getting DNS records:", error);
+      return { 
+        success: false, 
+        message: error.message || "An error occurred while getting DNS records" 
+      };
+    }
+  }
 }
 
 module.exports = new NamecheapService();

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   GlobeAltIcon,
   Cog6ToothIcon,
@@ -10,6 +11,7 @@ import {
   PlusIcon,
   MagnifyingGlassIcon,
   FunnelIcon,
+  ArrowRightIcon,
 } from "@heroicons/react/24/outline";
 import { domainService } from "../services/domainService";
 
@@ -21,6 +23,7 @@ const MyDomains = () => {
   const [selectedDomain, setSelectedDomain] = useState(null); // Will store { id, name }
   const [showDNSModal, setShowDNSModal] = useState(false);
   const [dnsRecords, setDnsRecords] = useState([]);
+  const navigate = useNavigate();
 
   const statusFilters = [
     { value: "all", label: "All Domains" },
@@ -163,16 +166,23 @@ const MyDomains = () => {
 
           <div className="flex flex-col space-y-2">
             <button
+              onClick={() => navigate(`/domains/${domain._id || domain.id}`)}
+              className="btn-primary text-sm flex items-center space-x-1"
+            >
+              <span>Manage Domain</span>
+              <ArrowRightIcon className="h-4 w-4" />
+            </button>
+            <button
               onClick={() => handleManageDNS(domain._id, domain.fullDomain)}
               className="btn-outline text-sm flex items-center space-x-1"
             >
               <Cog6ToothIcon className="h-4 w-4" />
-              <span>Manage DNS</span>
+              <span>DNS Settings</span>
             </button>
             {(domain.status === "expiring" || domain.status === "expired") && (
               <button
                 onClick={() => handleRenewDomain(domain.name)}
-                className="btn-primary text-sm"
+                className="btn-secondary text-sm"
               >
                 Renew Domain
               </button>

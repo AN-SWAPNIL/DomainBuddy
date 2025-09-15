@@ -392,9 +392,40 @@ const getUserDomains = async (req, res, next) => {
   }
 };
 
+// Get domain by ID (protected route)
+const getDomainById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Get specific domain for the user
+    const { data: domain, error: domainError } = await supabase
+      .from("domains")
+      .select("*")
+      .eq("id", id)
+      .eq("owner_id", req.user.id)
+      .single();
+
+    if (domainError || !domain) {
+      return res.status(404).json({
+        success: false,
+        message: "Domain not found or access denied",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: domain,
+    });
+  } catch (error) {
+    console.error("Get domain by ID error:", error);
+    next(error);
+  }
+};
+
 module.exports = {
   searchDomains,
   checkAvailability,
   purchaseDomain,
   getUserDomains,
+  getDomainById,
 };

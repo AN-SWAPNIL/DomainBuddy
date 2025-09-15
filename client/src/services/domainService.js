@@ -314,23 +314,8 @@ export const domainService = {
       const response = await api.get(`/domains/${domainId}`);
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      return {
-        id: domainId,
-        name: "example.com",
-        status: "active",
-        registrationDate: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000),
-        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        autoRenew: true,
-        locked: false,
-        privacy: true,
-        nameservers: ["ns1.example.com", "ns2.example.com"],
-        traffic: {
-          monthly: 1500,
-          trend: "up",
-        },
-        estimatedValue: 2500,
-      };
+      console.error("❌ Error fetching domain details:", error);
+      throw error;
     }
   },
 

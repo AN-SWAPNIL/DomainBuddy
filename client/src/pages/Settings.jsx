@@ -1,546 +1,575 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useContext } from "react";
+import { motion } from "framer-motion";
+import { useForm } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
 import {
   UserIcon,
-  LockClosedIcon,
-  BellIcon,
+  EnvelopeIcon,
+  PhoneIcon,
+  MapPinIcon,
   CreditCardIcon,
-  Cog6ToothIcon,
+  BellIcon,
+  ShieldCheckIcon,
   KeyIcon,
+  EyeIcon,
+  EyeSlashIcon,
 } from "@heroicons/react/24/outline";
-import { userService } from "../services/userService";
+import { AuthContext } from "../contexts/AuthContext";
+import { authService } from "../services/authService";
+import { paymentService } from "../services/paymentService";
+
+const profileSchema = yup.object({
+  first_name: yup.string().required("First name is required"),
+  last_name: yup.string().required("Last name is required"),
+  email: yup.string().email("Invalid email").required("Email is required"),
+  phone: yup
+    .string()
+    .test(
+      "no-country-code",
+      "Please do not include country code (+ prefix). The country code will be automatically added based on your selected country.",
+      function (value) {
+        if (!value) return true; // Allow empty values
+        return !value.trim().startsWith("+");
+      }
+    ),
+  street: yup.string(),
+  city: yup.string(),
+  state: yup.string(),
+  country: yup.string(),
+  zip_code: yup.string(),
+});
+
+const passwordSchema = yup.object({
+  currentPassword: yup.string().required("Current password is required"),
+  newPassword: yup
+    .string()
+    .min(6, "Password must be at least 6 characters")
+    .required("New password is required"),
+  confirmPassword: yup
+    .string()
+    .oneOf([yup.ref("newPassword")], "Passwords must match")
+    .required("Confirm password is required"),
+});
 
 const Settings = () => {
+  const { user, updateUser, refreshUser } = useContext(AuthContext);
   const [activeTab, setActiveTab] = useState("profile");
-  const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(null);
-  const [profileData, setProfileData] = useState({
-    first_name: "",
-    last_name: "",
-    email: "",
-    phone: "",
-    street: "",
-    city: "",
-    state: "",
-    country: "US",
-    zip_code: "",
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState([]);
+
+  const profileForm = useForm({
+    resolver: yupResolver(profileSchema),
+    defaultValues: {
+      first_name: user?.first_name || "",
+      last_name: user?.last_name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      street: user?.street || "",
+      city: user?.city || "",
+      state: user?.state || "",
+      country: user?.country || "",
+      zip_code: user?.zip_code || "",
+    },
   });
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
+
+  const passwordForm = useForm({
+    resolver: yupResolver(passwordSchema),
   });
-  const [notifications, setNotifications] = useState({
-    emailNotifications: true,
-    domainExpiry: true,
-    paymentReminders: true,
-    marketingEmails: false,
-  });
+
+  const handleProfileUpdate = async (data) => {
+    try {
+      console.log("🔄 Updating profile with data:", data);
+      const response = await authService.updateProfile(data);
+      console.log("✅ Profile update response:", response);
+      
+      // Extract user data from response
+      const updatedUser = response.success ? response.data.user : response.user || response;
+      console.log("📋 Updated user data:", updatedUser);
+      
+      // Update the context with the new user data
+      updateUser(updatedUser);
+      
+      // Also refresh from server to ensure consistency
+      try {
+        await refreshUser();
+        console.log("✅ User data refreshed from server after profile update");
+      } catch (refreshError) {
+        console.warn("⚠️ Failed to refresh user data from server, but profile was updated:", refreshError);
+      }
+      
+      // Reset form with the updated data to reflect changes
+      profileForm.reset({
+        first_name: updatedUser.first_name || "",
+        last_name: updatedUser.last_name || "",
+        email: updatedUser.email || "",
+        phone: updatedUser.phone || "",
+        street: updatedUser.street || "",
+        city: updatedUser.city || "",
+        state: updatedUser.state || "",
+        country: updatedUser.country || "",
+        zip_code: updatedUser.zip_code || "",
+      });
+      
+      alert("Profile updated successfully!");
+    } catch (error) {
+      console.error("Profile update error:", error);
+      alert("Failed to update profile. Please try again.");
+    }
+  };
+
+  const handlePasswordChange = async (data) => {
+    try {
+      await authService.changePassword(data);
+      passwordForm.reset();
+      alert("Password changed successfully!");
+    } catch (error) {
+      console.error("Password change error:", error);
+      alert("Failed to change password. Please check your current password.");
+    }
+  };
 
   const tabs = [
     { id: "profile", label: "Profile", icon: UserIcon },
-    { id: "security", label: "Security", icon: LockClosedIcon },
-    { id: "notifications", label: "Notifications", icon: BellIcon },
+    { id: "security", label: "Security", icon: ShieldCheckIcon },
     { id: "billing", label: "Billing", icon: CreditCardIcon },
-    { id: "api", label: "API Keys", icon: KeyIcon },
   ];
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      setLoading(true);
-      const userData = await userService.getProfile();
-      setUser(userData);
-      setProfileData({
-        first_name: userData.first_name || "",
-        last_name: userData.last_name || "",
-        email: userData.email || "",
-        phone: userData.phone || "",
-        street: userData.street || "",
-        city: userData.city || "",
-        state: userData.state || "",
-        country: userData.country || "US",
-        zip_code: userData.zip_code || "",
-      });
-    } catch (error) {
-      console.error("Failed to load user data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleProfileSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      setLoading(true);
-      await userService.updateProfile(profileData);
-      alert("Profile updated successfully!");
-    } catch (error) {
-      console.error("Failed to update profile:", error);
-      alert("Failed to update profile. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePasswordSubmit = async (e) => {
-    e.preventDefault();
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      alert("New passwords don't match!");
-      return;
-    }
-    try {
-      setLoading(true);
-      await userService.changePassword({
-        currentPassword: passwordData.currentPassword,
-        newPassword: passwordData.newPassword,
-      });
-      alert("Password changed successfully!");
-      setPasswordData({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-    } catch (error) {
-      console.error("Failed to change password:", error);
-      alert("Failed to change password. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleNotificationSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      setLoading(true);
-      await userService.updateNotifications(notifications);
-      alert("Notification preferences updated!");
-    } catch (error) {
-      console.error("Failed to update notifications:", error);
-      alert("Failed to update notification preferences. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderProfileTab = () => (
-    <form onSubmit={handleProfileSubmit} className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            First Name
-          </label>
-          <input
-            type="text"
-            value={profileData.first_name}
-            onChange={(e) =>
-              setProfileData({ ...profileData, first_name: e.target.value })
-            }
-            className="input-field"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Last Name
-          </label>
-          <input
-            type="text"
-            value={profileData.last_name}
-            onChange={(e) =>
-              setProfileData({ ...profileData, last_name: e.target.value })
-            }
-            className="input-field"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Email Address
-          </label>
-          <input
-            type="email"
-            value={profileData.email}
-            onChange={(e) =>
-              setProfileData({ ...profileData, email: e.target.value })
-            }
-            className="input-field"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Phone Number
-          </label>
-          <input
-            type="tel"
-            value={profileData.phone}
-            onChange={(e) =>
-              setProfileData({ ...profileData, phone: e.target.value })
-            }
-            className="input-field"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Street Address
-          </label>
-          <input
-            type="text"
-            value={profileData.street}
-            onChange={(e) =>
-              setProfileData({ ...profileData, street: e.target.value })
-            }
-            className="input-field"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            City
-          </label>
-          <input
-            type="text"
-            value={profileData.city}
-            onChange={(e) =>
-              setProfileData({ ...profileData, city: e.target.value })
-            }
-            className="input-field"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            State/Province
-          </label>
-          <input
-            type="text"
-            value={profileData.state}
-            onChange={(e) =>
-              setProfileData({ ...profileData, state: e.target.value })
-            }
-            className="input-field"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            ZIP/Postal Code
-          </label>
-          <input
-            type="text"
-            value={profileData.zip_code}
-            onChange={(e) =>
-              setProfileData({ ...profileData, zip_code: e.target.value })
-            }
-            className="input-field"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Country
-          </label>
-          <select
-            value={profileData.country}
-            onChange={(e) =>
-              setProfileData({ ...profileData, country: e.target.value })
-            }
-            className="input-field"
-          >
-            <option value="US">United States</option>
-            <option value="CA">Canada</option>
-            <option value="GB">United Kingdom</option>
-            <option value="AU">Australia</option>
-            <option value="DE">Germany</option>
-            <option value="FR">France</option>
-            <option value="IN">India</option>
-            <option value="CN">China</option>
-            <option value="BR">Brazil</option>
-            <option value="MX">Mexico</option>
-            <option value="IT">Italy</option>
-            <option value="ES">Spain</option>
-            <option value="NL">Netherlands</option>
-            <option value="SE">Sweden</option>
-            <option value="NO">Norway</option>
-            <option value="DK">Denmark</option>
-            <option value="FI">Finland</option>
-          </select>
-        </div>
-      </div>
-      <div className="flex justify-end">
-        <button type="submit" disabled={loading} className="btn-primary">
-          {loading ? "Updating..." : "Update Profile"}
-        </button>
-      </div>
-    </form>
-  );
-
-  const renderSecurityTab = () => (
-    <form onSubmit={handlePasswordSubmit} className="space-y-6">
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Current Password
-          </label>
-          <input
-            type="password"
-            value={passwordData.currentPassword}
-            onChange={(e) =>
-              setPasswordData({
-                ...passwordData,
-                currentPassword: e.target.value,
-              })
-            }
-            className="input-field"
-            required
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            New Password
-          </label>
-          <input
-            type="password"
-            value={passwordData.newPassword}
-            onChange={(e) =>
-              setPasswordData({ ...passwordData, newPassword: e.target.value })
-            }
-            className="input-field"
-            required
-            minLength={8}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Confirm New Password
-          </label>
-          <input
-            type="password"
-            value={passwordData.confirmPassword}
-            onChange={(e) =>
-              setPasswordData({
-                ...passwordData,
-                confirmPassword: e.target.value,
-              })
-            }
-            className="input-field"
-            required
-            minLength={8}
-          />
-        </div>
-      </div>
-      <div className="flex justify-end">
-        <button type="submit" disabled={loading} className="btn-primary">
-          {loading ? "Changing..." : "Change Password"}
-        </button>
-      </div>
-    </form>
-  );
-
-  const renderNotificationsTab = () => (
-    <form onSubmit={handleNotificationSubmit} className="space-y-6">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-gray-900">
-              Email Notifications
-            </h3>
-            <p className="text-sm text-gray-500">
-              Receive notifications via email
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={notifications.emailNotifications}
-            onChange={(e) =>
-              setNotifications({
-                ...notifications,
-                emailNotifications: e.target.checked,
-              })
-            }
-            className="toggle"
-          />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-gray-900">
-              Domain Expiry Alerts
-            </h3>
-            <p className="text-sm text-gray-500">
-              Get notified when domains are about to expire
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={notifications.domainExpiry}
-            onChange={(e) =>
-              setNotifications({
-                ...notifications,
-                domainExpiry: e.target.checked,
-              })
-            }
-            className="toggle"
-          />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-gray-900">
-              Payment Reminders
-            </h3>
-            <p className="text-sm text-gray-500">
-              Get notified about upcoming payments
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={notifications.paymentReminders}
-            onChange={(e) =>
-              setNotifications({
-                ...notifications,
-                paymentReminders: e.target.checked,
-              })
-            }
-            className="toggle"
-          />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-gray-900">
-              Marketing Emails
-            </h3>
-            <p className="text-sm text-gray-500">
-              Receive updates about new features and promotions
-            </p>
-          </div>
-          <input
-            type="checkbox"
-            checked={notifications.marketingEmails}
-            onChange={(e) =>
-              setNotifications({
-                ...notifications,
-                marketingEmails: e.target.checked,
-              })
-            }
-            className="toggle"
-          />
-        </div>
-      </div>
-      <div className="flex justify-end">
-        <button type="submit" disabled={loading} className="btn-primary">
-          {loading ? "Updating..." : "Update Preferences"}
-        </button>
-      </div>
-    </form>
-  );
-
-  const renderBillingTab = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 p-6 rounded-lg">
+  const ProfileTab = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-6"
+    >
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Payment Methods
+          Personal Information
         </h3>
-        <p className="text-gray-600 mb-4">
-          Manage your payment methods for domain purchases
-        </p>
-        <button className="btn-outline">
-          <CreditCardIcon className="h-5 w-5 mr-2" />
-          Add Payment Method
-        </button>
+        <form
+          onSubmit={profileForm.handleSubmit(handleProfileUpdate)}
+          className="space-y-4"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                First Name
+              </label>
+              <div className="relative">
+                <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("first_name")}
+                  className="input pl-10"
+                  placeholder="Enter your first name"
+                />
+              </div>
+              {profileForm.formState.errors.first_name && (
+                <p className="text-red-600 text-sm mt-1">
+                  {profileForm.formState.errors.first_name.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Last Name
+              </label>
+              <div className="relative">
+                <UserIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("last_name")}
+                  className="input pl-10"
+                  placeholder="Enter your last name"
+                />
+              </div>
+              {profileForm.formState.errors.last_name && (
+                <p className="text-red-600 text-sm mt-1">
+                  {profileForm.formState.errors.last_name.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
+              </label>
+              <div className="relative">
+                <EnvelopeIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("email")}
+                  type="email"
+                  className="input pl-10"
+                  placeholder="Enter your email"
+                />
+              </div>
+              {profileForm.formState.errors.email && (
+                <p className="text-red-600 text-sm mt-1">
+                  {profileForm.formState.errors.email.message}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number
+              </label>
+              <div className="relative">
+                <PhoneIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("phone")}
+                  type="tel"
+                  className="input pl-10"
+                  placeholder="e.g., (555) 123-4567 or 5551234567"
+                />
+              </div>
+              <p className="text-xs text-blue-600 mt-1">
+                💡 Don't include country code (e.g., +1, +44). It will be
+                automatically added based on your selected country.
+              </p>
+              {profileForm.formState.errors.phone && (
+                <p className="text-red-600 text-sm mt-1">
+                  {profileForm.formState.errors.phone.message}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Street Address
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("street")}
+                  className="input pl-10"
+                  placeholder="Enter your street address"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                City
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("city")}
+                  className="input pl-10"
+                  placeholder="Enter your city"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                State/Province
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("state")}
+                  className="input pl-10"
+                  placeholder="Enter your state/province"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                ZIP/Postal Code
+              </label>
+              <div className="relative">
+                <MapPinIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  {...profileForm.register("zip_code")}
+                  className="input pl-10"
+                  placeholder="Enter your ZIP/postal code"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Country
+            </label>
+            <select {...profileForm.register("country")} className="input">
+              <option value="">Select Country</option>
+              <option value="US">United States</option>
+              <option value="CA">Canada</option>
+              <option value="GB">United Kingdom</option>
+              <option value="AU">Australia</option>
+              <option value="DE">Germany</option>
+              <option value="FR">France</option>
+              <option value="IN">India</option>
+              <option value="JP">Japan</option>
+              <option value="CN">China</option>
+              <option value="BR">Brazil</option>
+              <option value="MX">Mexico</option>
+              <option value="IT">Italy</option>
+              <option value="ES">Spain</option>
+              <option value="NL">Netherlands</option>
+              <option value="SE">Sweden</option>
+              <option value="NO">Norway</option>
+              <option value="DK">Denmark</option>
+              <option value="FI">Finland</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary">
+              Update Profile
+            </button>
+          </div>
+        </form>
       </div>
-      <div className="bg-gray-50 p-6 rounded-lg">
+    </motion.div>
+  );
+
+  const SecurityTab = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-6"
+    >
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">
+          Change Password
+        </h3>
+        <form
+          onSubmit={passwordForm.handleSubmit(handlePasswordChange)}
+          className="space-y-4"
+        >
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Current Password
+            </label>
+            <div className="relative">
+              <KeyIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                {...passwordForm.register("currentPassword")}
+                type={showCurrentPassword ? "text" : "password"}
+                className="input pl-10 pr-10"
+                placeholder="Enter current password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showCurrentPassword ? (
+                  <EyeSlashIcon className="h-4 w-4" />
+                ) : (
+                  <EyeIcon className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {passwordForm.formState.errors.currentPassword && (
+              <p className="text-red-600 text-sm mt-1">
+                {passwordForm.formState.errors.currentPassword.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              New Password
+            </label>
+            <div className="relative">
+              <KeyIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                {...passwordForm.register("newPassword")}
+                type={showNewPassword ? "text" : "password"}
+                className="input pl-10 pr-10"
+                placeholder="Enter new password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showNewPassword ? (
+                  <EyeSlashIcon className="h-4 w-4" />
+                ) : (
+                  <EyeIcon className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {passwordForm.formState.errors.newPassword && (
+              <p className="text-red-600 text-sm mt-1">
+                {passwordForm.formState.errors.newPassword.message}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Confirm New Password
+            </label>
+            <div className="relative">
+              <KeyIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                {...passwordForm.register("confirmPassword")}
+                type={showConfirmPassword ? "text" : "password"}
+                className="input pl-10 pr-10"
+                placeholder="Confirm new password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showConfirmPassword ? (
+                  <EyeSlashIcon className="h-4 w-4" />
+                ) : (
+                  <EyeIcon className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {passwordForm.formState.errors.confirmPassword && (
+              <p className="text-red-600 text-sm mt-1">
+                {passwordForm.formState.errors.confirmPassword.message}
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary">
+              Change Password
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">
+          Two-Factor Authentication
+        </h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-gray-600">Secure your account with 2FA</p>
+            <p className="text-sm text-gray-500">
+              Add an extra layer of security to your account
+            </p>
+          </div>
+          <button className="btn-outline">Enable 2FA</button>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const BillingTab = () => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-6"
+    >
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-medium text-gray-900">Payment Methods</h3>
+          <button className="btn-primary">Add Payment Method</button>
+        </div>
+
+        {paymentMethods.length === 0 ? (
+          <div className="text-center py-8">
+            <CreditCardIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h4 className="text-lg font-medium text-gray-900 mb-2">
+              No payment methods
+            </h4>
+            <p className="text-gray-600 mb-4">
+              Add a payment method to purchase domains
+            </p>
+            <button className="btn-primary">Add Payment Method</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {paymentMethods.map((method, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
+              >
+                <div className="flex items-center space-x-3">
+                  <CreditCardIcon className="h-6 w-6 text-gray-400" />
+                  <div>
+                    <div className="font-medium">
+                      **** **** **** {method.last4}
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {method.brand} • Expires {method.expiry}
+                    </div>
+                  </div>
+                </div>
+                <div className="space-x-2">
+                  <button className="btn-outline text-sm">Edit</button>
+                  <button className="text-red-600 text-sm">Remove</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">
           Billing History
         </h3>
-        <p className="text-gray-600 mb-4">
-          View your past transactions and invoices
-        </p>
-        <button className="btn-outline">View Billing History</button>
+        <div className="text-center py-8 text-gray-500">
+          No billing history available
+        </div>
       </div>
-    </div>
-  );
-
-  const renderAPITab = () => (
-    <div className="space-y-6">
-      <div className="bg-gray-50 p-6 rounded-lg">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">API Keys</h3>
-        <p className="text-gray-600 mb-4">
-          Generate API keys to integrate with your applications
-        </p>
-        <button className="btn-primary">
-          <KeyIcon className="h-5 w-5 mr-2" />
-          Generate API Key
-        </button>
-      </div>
-      <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
-        <p className="text-yellow-800 text-sm">
-          <strong>Note:</strong> Keep your API keys secure and never share them
-          publicly. API keys provide full access to your account.
-        </p>
-      </div>
-    </div>
+    </motion.div>
   );
 
   const renderTabContent = () => {
     switch (activeTab) {
       case "profile":
-        return renderProfileTab();
+        return <ProfileTab />;
       case "security":
-        return renderSecurityTab();
-      case "notifications":
-        return renderNotificationsTab();
+        return <SecurityTab />;
       case "billing":
-        return renderBillingTab();
-      case "api":
-        return renderAPITab();
+        return <BillingTab />;
       default:
-        return renderProfileTab();
+        return <ProfileTab />;
     }
   };
 
-  if (loading && !user) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Cog6ToothIcon className="h-12 w-12 text-primary-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading settings...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-lg shadow">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Account Settings</h1>
+          <p className="text-gray-600 mt-1">
+            Manage your account preferences and settings
+          </p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          {/* Tab Navigation */}
           <div className="border-b border-gray-200">
-            <div className="px-6 py-4">
-              <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-              <p className="text-gray-600 mt-1">
-                Manage your account settings and preferences
-              </p>
-            </div>
-            <div className="px-6">
-              <nav className="flex space-x-8">
-                {tabs.map((tab) => {
-                  const IconComponent = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
-                        activeTab === tab.id
-                          ? "border-primary-500 text-primary-600"
-                          : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-                      }`}
-                    >
-                      <IconComponent className="h-5 w-5" />
-                      <span>{tab.label}</span>
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
+            <nav className="flex space-x-8 px-6" aria-label="Tabs">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${
+                    activeTab === tab.id
+                      ? "border-primary-500 text-primary-600"
+                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  }`}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
           </div>
-          <div className="px-6 py-8">{renderTabContent()}</div>
+
+          {/* Tab Content */}
+          <div className="p-6">{renderTabContent()}</div>
         </div>
       </div>
     </div>

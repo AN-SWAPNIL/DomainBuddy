@@ -228,54 +228,6 @@ const Dashboard = () => {
           </Link>
         </div>
       </motion.div>
-
-      {/* Recent Activity */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.5 }}
-        className="bg-white rounded-xl p-6 shadow-lg"
-      >
-        <h2 className="text-xl font-bold text-gray-900 mb-6">
-          Recent Activity
-        </h2>
-        <div className="space-y-4">
-          <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-              <Globe className="w-4 h-4 text-green-600" />
-            </div>
-            <div>
-              <p className="text-gray-900">
-                <span className="font-medium">techstartup.com</span> was
-                successfully registered
-              </p>
-              <p className="text-sm text-gray-500">2 days ago</p>
-            </div>
-          </div>
-          <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-              <Bot className="w-4 h-4 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-gray-900">
-                AI consultation completed for tech startup domains
-              </p>
-              <p className="text-sm text-gray-500">5 days ago</p>
-            </div>
-          </div>
-          <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-              <Search className="w-4 h-4 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-gray-900">
-                Domain search performed for "app" keywords
-              </p>
-              <p className="text-sm text-gray-500">1 week ago</p>
-            </div>
-          </div>
-        </div>
-      </motion.div>
     </div>
   );
 };

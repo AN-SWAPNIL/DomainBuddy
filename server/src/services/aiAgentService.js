@@ -674,7 +674,10 @@ class AIAgentService {
         // Add payment redirection fields
         requiresPayment: finalState.requiresPayment,
         redirectToPayment: finalState.redirectToPayment,
-        paymentUrl: finalState.paymentUrl
+        paymentUrl: finalState.paymentUrl,
+        // Add profile update fields
+        requiresProfileUpdate: finalState.requiresProfileUpdate,
+        missingFields: finalState.missingFields
       };
     } catch (error) {
       console.error("❌ Error processing user message:", error);
@@ -1001,7 +1004,10 @@ ${conversationContext}`;
               paymentCompleted: purchaseResult.paymentCompleted,
               requiresPayment: purchaseResult.requiresPayment,
               redirectToPayment: purchaseResult.redirectToPayment,
-              requiresOTPVerification: purchaseResult.requiresOTPVerification
+              requiresOTPVerification: purchaseResult.requiresOTPVerification,
+              // Pass through profile-related fields
+              requiresProfileUpdate: purchaseResult.requiresProfileUpdate,
+              missingFields: purchaseResult.missingFields
             };
           }
           break;
@@ -1080,7 +1086,10 @@ ${conversationContext}`;
         // Pass through payment redirection fields
         requiresPayment: result?.requiresPayment,
         redirectToPayment: result?.redirectToPayment,
-        paymentUrl: result?.paymentUrl
+        paymentUrl: result?.paymentUrl,
+        // Pass through profile update fields
+        requiresProfileUpdate: result?.requiresProfileUpdate,
+        missingFields: result?.missingFields
       };
     } catch (error) {
       console.error("❌ Error executing action:", error);
@@ -1336,6 +1345,51 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       const stripeService = require("./stripeService");
       const namecheapService = require("./namecheapService");
 
+      // Step 0: Check if user profile is complete before proceeding
+      const { data: userProfile, error: profileError } = await supabase
+        .from('users')
+        .select('id, email, first_name, last_name, phone, street, city, state, country, zip_code, stripe_customer_id')
+        .eq('id', userId)
+        .single();
+
+      if (profileError || !userProfile) {
+        console.error('❌ Failed to get user information:', profileError);
+        return {
+          success: false,
+          message: 'Sorry, I encountered an error processing your purchase. Please try again.'
+        };
+      }
+
+      // Check profile completeness
+      const requiredFields = [
+        { field: "first_name", label: "First Name", value: userProfile.first_name },
+        { field: "last_name", label: "Last Name", value: userProfile.last_name },
+        { field: "email", label: "Email", value: userProfile.email },
+        { field: "phone", label: "Phone Number", value: userProfile.phone },
+        { field: "street", label: "Street Address", value: userProfile.street },
+        { field: "city", label: "City", value: userProfile.city },
+        { field: "state", label: "State/Province", value: userProfile.state },
+        { field: "country", label: "Country", value: userProfile.country },
+        { field: "zip_code", label: "ZIP/Postal Code", value: userProfile.zip_code },
+      ];
+
+      const missingFields = [];
+      requiredFields.forEach(({ field, label, value }) => {
+        if (!value || value.trim() === "") {
+          missingFields.push(label);
+        }
+      });
+
+      if (missingFields.length > 0) {
+        console.log(`🚨 Profile incomplete for user ${userId}. Missing: ${missingFields.join(', ')}`);
+        return {
+          success: false,
+          message: `Before I can help you purchase ${domainName}, you'll need to complete your profile first.\n\nI need the following information:\n• ${missingFields.join('\n• ')}\n\nThis information is required for domain registration and billing purposes. Click on the button below to update your profile.`,
+          requiresProfileUpdate: true,
+          missingFields: missingFields,
+        };
+      }
+
       // Step 1: Check domain availability
       let availability;
       try {
@@ -1356,20 +1410,8 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         };
       }
 
-      // Step 2: Get user information for payment
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('id, email, first_name, last_name, stripe_customer_id')
-        .eq('id', userId)
-        .single();
-
-      if (userError || !user) {
-        console.error('❌ Failed to get user information:', userError);
-        return {
-          success: false,
-          message: 'Sorry, I encountered an error processing your purchase. Please try again.'
-        };
-      }
+      // Step 2: Get user information for payment (now we know profile is complete)
+      const user = userProfile;
 
       // Construct full name from first_name and last_name
       const fullName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Customer';

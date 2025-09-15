@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
+import toast from "react-hot-toast";
 import {
   UserIcon,
   EnvelopeIcon,
@@ -113,10 +114,10 @@ const Settings = () => {
         zip_code: updatedUser.zip_code || "",
       });
       
-      alert("Profile updated successfully!");
+      toast.success("Profile updated successfully!");
     } catch (error) {
       console.error("Profile update error:", error);
-      alert("Failed to update profile. Please try again.");
+      toast.error("Failed to update profile. Please try again.");
     }
   };
 
@@ -124,10 +125,10 @@ const Settings = () => {
     try {
       await authService.changePassword(data);
       passwordForm.reset();
-      alert("Password changed successfully!");
+      toast.success("Password changed successfully!");
     } catch (error) {
       console.error("Password change error:", error);
-      alert("Failed to change password. Please check your current password.");
+      toast.error("Failed to change password. Please check your current password.");
     }
   };
 

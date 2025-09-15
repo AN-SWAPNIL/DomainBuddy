@@ -10,11 +10,39 @@ import {
 } from "@heroicons/react/24/outline";
 import { domainService } from "../services/domainService";
 import { useProfileCheck } from "../utils/profileValidation";
+import ProfileCompleteModal from "../components/ui/ProfileCompleteModal";
 
 const DomainSearch = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { checkProfileAndProceed } = useProfileCheck(user, navigate);
+  
+  // Profile modal state
+  const [profileModalState, setProfileModalState] = useState({
+    isOpen: false,
+    domain: null,
+    missingFields: [],
+    onConfirm: null,
+  });
+
+  const showProfileModal = ({ domain, missingFields, onConfirm }) => {
+    setProfileModalState({
+      isOpen: true,
+      domain,
+      missingFields,
+      onConfirm,
+    });
+  };
+
+  const hideProfileModal = () => {
+    setProfileModalState({
+      isOpen: false,
+      domain: null,
+      missingFields: [],
+      onConfirm: null,
+    });
+  };
+
+  const { checkProfileAndProceed } = useProfileCheck(user, navigate, showProfileModal);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -353,6 +381,20 @@ const DomainSearch = () => {
           </div>
         )}
       </div>
+
+      {/* Profile Complete Modal */}
+      <ProfileCompleteModal
+        isOpen={profileModalState.isOpen}
+        onClose={hideProfileModal}
+        onGoToProfile={() => {
+          if (profileModalState.onConfirm) {
+            profileModalState.onConfirm();
+          }
+          hideProfileModal();
+        }}
+        missingFields={profileModalState.missingFields}
+        domainName={profileModalState.domain}
+      />
     </div>
   );
 };

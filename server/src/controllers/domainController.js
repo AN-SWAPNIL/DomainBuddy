@@ -264,6 +264,7 @@ const purchaseDomain = async (req, res, next) => {
           is_premium: availability.isPremium || false,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+          expiration_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
         },
       ])
       .select()

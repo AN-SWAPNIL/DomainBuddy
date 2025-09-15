@@ -230,9 +230,9 @@ const DomainSearch = () => {
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-gray-900">
-              ${domain.price}
+              {domain.price ? '$' + domain.price : ''}
             </div>
-            <div className="text-sm text-gray-500">/year</div>
+            <div className="text-sm text-gray-500">{domain.available ? '/year' : '' }</div>
             {domain.available && (
               <button
                 onClick={() => onPurchase(domain.name)}

@@ -408,16 +408,10 @@ const AIConsultant = () => {
                           {domain.name}
                         </h4>
                         <p className="text-sm text-gray-600">
-                          ${domain.price}/year
+                          {domain.price ? '$' + domain.price + '/year' : 'Not available'}
                         </p>
                       </div>
                       <div className="space-x-2">
-                        <button
-                          onClick={() => handleDomainAction(domain, "search")}
-                          className="text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
-                        >
-                          Check
-                        </button>
                         {domain.available && (
                           <button
                             onClick={() =>

@@ -2,6 +2,7 @@ const { ChatGoogleGenerativeAI } = require('@langchain/google-genai');
 const { HumanMessage, SystemMessage } = require('@langchain/core/messages');
 const { Tool } = require('@langchain/core/tools');
 const namecheapService = require("./namecheapService");
+const otpService = require('./otpService');
 const supabase = require("../config/database");
 
 // Define LangChain Tools for Domain Operations
@@ -62,6 +63,21 @@ class DomainCheckTool extends Tool {
   async _call(input) {
     const { domainName } = JSON.parse(input);
     return JSON.stringify(await this.aiService.checkDomain(domainName));
+  }
+}
+
+class OTPVerificationTool extends Tool {
+  name = "otp_verification";
+  description = "Verify OTP code for domain purchase security";
+
+  constructor(aiService) {
+    super();
+    this.aiService = aiService;
+  }
+
+  async _call(input) {
+    const { userId, email, otpCode } = JSON.parse(input);
+    return JSON.stringify(await this.aiService.verifyOTPForPurchase(userId, email, otpCode));
   }
 }
 
@@ -174,7 +190,8 @@ class AIAgentService {
         new DomainSearchTool(this),
         new CreativeDomainTool(this),
         new DomainPurchaseTool(this),
-        new DomainCheckTool(this)
+        new DomainCheckTool(this),
+        new OTPVerificationTool(this)
       ];
 
       // Create the agent workflow using LangGraph
@@ -468,6 +485,103 @@ class AIAgentService {
     try {
       console.log(`🔍 Processing user message: "${message}"`);
 
+      // Check for OTP verification first (before other processing)
+      const otpPattern = /(?:verify|confirmation|code|otp).*?(\d{6})/i;
+      const otpMatch = message.match(otpPattern);
+      
+      if (otpMatch && userId) {
+        const otpCode = otpMatch[1];
+        console.log(`🔐 Detected OTP verification request with code: ${otpCode}`);
+        
+        // Get user info for email
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('email')
+          .eq('id', userId)
+          .single();
+
+        if (!userError && user) {
+          try {
+            const otpTool = this.tools.find(t => t.name === "otp_verification");
+            if (otpTool) {
+              const verificationResult = await otpTool._call(JSON.stringify({
+                userId: userId,
+                email: user.email,
+                otpCode: otpCode
+              }));
+              
+              const result = JSON.parse(verificationResult);
+              
+              // Add to history
+              this.addToHistory(userId, 'user', message);
+              this.addToHistory(userId, 'assistant', result.message, result.domains);
+              
+              // Save conversation to database
+              if (result.message) {
+                await this.saveConversation(userId, message, result);
+              }
+              
+              return result;
+            }
+          } catch (otpError) {
+            console.error('❌ OTP verification error:', otpError);
+            return {
+              intent: 'otp_verification',
+              message: 'Sorry, I encountered an error verifying your code. Please try again.',
+              success: false
+            };
+          }
+        }
+      }
+
+      // Check for OTP resend requests
+      const resendPattern = /(?:resend|send.*new|new.*code|send.*again)/i;
+      if (resendPattern.test(message) && userId) {
+        console.log('🔄 Detected OTP resend request');
+        
+        // Get user info for email
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('email')
+          .eq('id', userId)
+          .single();
+
+        if (!userError && user) {
+          try {
+            const resendResult = await otpService.resendOTP(userId, user.email);
+            
+            const responseMessage = resendResult.success
+              ? `🔐 I've sent a new 6-digit verification code to ${user.email}.\n\nPlease provide the new code by saying: "Verify with code XXXXXX"\n\nThe code will expire in 3 minutes.`
+              : 'Sorry, I encountered an error sending a new verification code. Please try starting the purchase process again.';
+            
+            // Add to history
+            this.addToHistory(userId, 'user', message);
+            this.addToHistory(userId, 'assistant', responseMessage);
+            
+            // Save conversation to database
+            await this.saveConversation(userId, message, {
+              intent: 'otp_resend',
+              message: responseMessage,
+              success: resendResult.success
+            });
+            
+            return {
+              intent: 'otp_resend',
+              message: responseMessage,
+              success: resendResult.success,
+              requiresOTPVerification: true
+            };
+          } catch (resendError) {
+            console.error('❌ OTP resend error:', resendError);
+            return {
+              intent: 'otp_resend',
+              message: 'Sorry, I encountered an error sending a new verification code. Please try again.',
+              success: false
+            };
+          }
+        }
+      }
+
       // Add user message to history
       if (userId) {
         this.addToHistory(userId, 'user', message);
@@ -646,11 +760,12 @@ Analyze the user's message and determine their intent and required actions.
 
 Respond with ONLY a JSON object with this structure:
 {
-  "intent": "domain_search" | "domain_purchase" | "domain_info" | "general_help",
-  "action": "search_domains" | "creative_search" | "purchase_domain" | "check_domain" | "none",
+  "intent": "domain_search" | "domain_purchase" | "domain_info" | "otp_verification" | "otp_resend" | "general_help",
+  "action": "search_domains" | "creative_search" | "purchase_domain" | "check_domain" | "verify_otp" | "resend_otp" | "none",
   "domain": "specific domain name if mentioned (only if user specifies full domain with extension)",
   "searchTerms": ["array", "of", "search", "terms", "without", "extensions"],
-  "isCreativeRequest": true | false
+  "isCreativeRequest": true | false,
+  "otpCode": "6-digit code if verification intent detected"
 }
 
 IMPORTANT RULES:
@@ -665,6 +780,15 @@ PURCHASE DETECTION:
 - Look for words like: "buy", "purchase", "get", "register", "order", "take"
 - Combined with domain names: "buy trackspot.com", "purchase the first domain", "I want to get livepin.com"
 - Extract the specific domain name mentioned
+
+OTP VERIFICATION DETECTION:
+- Look for 6-digit codes: "123456", "verify with 654321", "code is 789012"
+- Keywords: "verify", "code", "confirmation", "otp", combined with 6 digits
+- Set intent to "otp_verification", action to "verify_otp", and extract the 6-digit code to "otpCode"
+
+OTP RESEND DETECTION:
+- Keywords: "resend", "send new code", "send again", "new verification code"
+- Set intent to "otp_resend", action to "resend_otp"
 
 CREATIVE vs SPECIFIC SEARCH:
 - Creative: "suggest domains for live location tracker device", "domains for my restaurant", "creative names for tech startup"
@@ -710,7 +834,8 @@ ${conversationContext}`;
           action: fallback.action,
           domain: fallback.domain,
           searchTerms: fallback.searchTerms || [],
-          isCreativeRequest: fallback.isCreativeRequest || false
+          isCreativeRequest: fallback.isCreativeRequest || false,
+          otpCode: fallback.otpCode || null
         };
       }
 
@@ -720,7 +845,8 @@ ${conversationContext}`;
         action: analysis.action,
         domain: analysis.domain,
         searchTerms: analysis.searchTerms || [],
-        isCreativeRequest: analysis.isCreativeRequest || false
+        isCreativeRequest: analysis.isCreativeRequest || false,
+        otpCode: analysis.otpCode || null
       };
     } catch (error) {
       console.error("❌ Error analyzing intent:", error);
@@ -731,7 +857,8 @@ ${conversationContext}`;
         action: fallback.action,
         domain: fallback.domain,
         searchTerms: fallback.searchTerms || [],
-        isCreativeRequest: fallback.isCreativeRequest || false
+        isCreativeRequest: fallback.isCreativeRequest || false,
+        otpCode: fallback.otpCode || null
       };
     }
   }
@@ -874,10 +1001,65 @@ ${conversationContext}`;
               paymentCompleted: purchaseResult.paymentCompleted,
               requiresPayment: purchaseResult.requiresPayment,
               redirectToPayment: purchaseResult.redirectToPayment,
-              paymentUrl: purchaseResult.paymentUrl
+              requiresOTPVerification: purchaseResult.requiresOTPVerification
             };
-          } else {
-            console.log(`❌ Missing domain or userId for purchase`);
+          }
+          break;
+
+        case "verify_otp":
+          console.log(`🔐 OTP verification case: otpCode=${state.otpCode}, userId=${state.userId}`);
+          if (state.otpCode && state.userId) {
+            const tool = this.tools.find(t => t.name === "otp_verification");
+            const input = JSON.stringify({
+              userId: state.userId,
+              email: "flexible@verification.com", // Placeholder - OTP service will find by user_id + code
+              otpCode: state.otpCode
+            });
+            
+            const verificationResult = JSON.parse(await tool._call(input));
+            result = {
+              domains: verificationResult.domains || [],
+              message: verificationResult.message,
+              success: verificationResult.success,
+              transactionId: verificationResult.transactionId,
+              paymentCompleted: verificationResult.paymentCompleted
+            };
+          }
+          break;
+
+        case "resend_otp":
+          console.log(`🔄 OTP resend case: userId=${state.userId}`);
+          if (state.userId) {
+            // Get user email
+            const { data: user, error: userError } = await supabase
+              .from('users')
+              .select('email')
+              .eq('id', state.userId)
+              .single();
+
+            if (!userError && user) {
+              try {
+                const resendResult = await otpService.resendOTP(state.userId, user.email);
+                result = {
+                  message: resendResult.success
+                    ? `🔐 I've sent a new 6-digit verification code to ${user.email}.\n\nPlease provide the new code by saying: "Verify with code XXXXXX"\n\nThe code will expire in 3 minutes.`
+                    : 'Sorry, I encountered an error sending a new verification code. Please try starting the purchase process again.',
+                  success: resendResult.success,
+                  requiresOTPVerification: true
+                };
+              } catch (resendError) {
+                console.error('❌ OTP resend error:', resendError);
+                result = {
+                  message: 'Sorry, I encountered an error sending a new verification code. Please try again.',
+                  success: false
+                };
+              }
+            } else {
+              result = {
+                message: 'Sorry, I encountered an error retrieving your account information.',
+                success: false
+              };
+            }
           }
           break;
 
@@ -1216,6 +1398,74 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         };
       }
 
+      // Step 3.5: Check if OTP verification is required
+      if (paymentDetails && !paymentDetails.otpVerified) {
+        // Check if OTP was already sent and we're waiting for verification
+        const hasActiveOTP = await otpService.hasActiveOTPSession(userId, paymentDetails.email || user.email);
+        
+        if (!hasActiveOTP) {
+          // Generate and send OTP
+          try {
+            console.log('🔐 Generating OTP for domain purchase verification...');
+            
+            const otpResult = await otpService.generateAndSendOTP(
+              userId,
+              paymentDetails.email || user.email,
+              {
+                domain: domainName,
+                price: sellingPrice,
+                paymentDetails: paymentDetails
+              },
+              domainName
+            );
+
+            if (otpResult.success) {
+              return {
+                success: false,
+                message: `🔐 For security, I've sent a 6-digit verification code to ${paymentDetails.email || user.email}.\n\nPlease provide the code by saying: "Verify with code XXXXXX"\n\nThe code will expire in 3 minutes. If you don't receive it, ask me to resend the verification code.`,
+                requiresOTPVerification: true,
+                domainName: domainName,
+                price: sellingPrice,
+                email: paymentDetails.email || user.email,
+                domains: [{
+                  name: domainName,
+                  available: true,
+                  price: sellingPrice,
+                  status: 'awaiting_otp_verification'
+                }]
+              };
+            } else {
+              return {
+                success: false,
+                message: 'Sorry, I encountered an error sending the verification email. Please try again or contact support.'
+              };
+            }
+          } catch (otpError) {
+            console.error('❌ OTP generation error:', otpError);
+            return {
+              success: false,
+              message: 'Sorry, I encountered an error with the verification process. Please try again.'
+            };
+          }
+        } else {
+          // OTP already sent, waiting for verification
+          return {
+            success: false,
+            message: `🔐 I'm still waiting for the 6-digit verification code that was sent to ${paymentDetails.email || user.email}.\n\nPlease provide the code by saying: "Verify with code XXXXXX"\n\nIf you need a new code, ask me to resend the verification code.`,
+            requiresOTPVerification: true,
+            domainName: domainName,
+            price: sellingPrice,
+            email: paymentDetails.email || user.email,
+            domains: [{
+              name: domainName,
+              available: true,
+              price: sellingPrice,
+              status: 'awaiting_otp_verification'
+            }]
+          };
+        }
+      }
+
       // Step 4: Create domain record in database
       const { data: newDomain, error: domainError } = await supabase
         .from("domains")
@@ -1542,6 +1792,56 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
         name: domainName,
         available: false,
         price: 12.99
+      };
+    }
+  }
+
+  async verifyOTPForPurchase(userId, email, otpCode) {
+    try {
+      console.log(`🔐 Verifying OTP for domain purchase: ${otpCode}`);
+      
+      const verificationResult = await otpService.verifyOTP(userId, email, otpCode);
+      
+      if (verificationResult.success) {
+        console.log('✅ OTP verification successful');
+        
+        // Extract payment data and domain info from the OTP record
+        const paymentData = verificationResult.paymentData;
+        
+        if (!paymentData || !paymentData.domain) {
+          return {
+            success: false,
+            message: 'Sorry, I encountered an error retrieving your purchase information. Please try again.'
+          };
+        }
+
+        // Mark payment details as OTP verified and continue with purchase
+        const verifiedPaymentDetails = {
+          ...paymentData.paymentDetails,
+          otpVerified: true
+        };
+
+        // Continue with the domain purchase now that OTP is verified
+        console.log(`🔄 Continuing domain purchase for ${paymentData.domain} with verified payment details`);
+        
+        const purchaseResult = await this.processDomainPurchase(
+          paymentData.domain, 
+          userId, 
+          verifiedPaymentDetails
+        );
+
+        return purchaseResult;
+      } else {
+        return {
+          success: false,
+          message: 'Invalid verification code. Please check the code and try again, or ask me to resend a new verification code.'
+        };
+      }
+    } catch (error) {
+      console.error('❌ Error verifying OTP for purchase:', error);
+      return {
+        success: false,
+        message: error.message || 'Sorry, I encountered an error during verification. Please try again.'
       };
     }
   }

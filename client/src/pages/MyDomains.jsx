@@ -117,7 +117,7 @@ const MyDomains = () => {
 
   const DomainCard = ({ domain }) => {
     const StatusIcon = getDomainStatusIcon(domain.status);
-    const expiryDate = new Date(domain.expiryDate);
+    const expiryDate = new Date(domain.expiration_date);
     const daysUntilExpiry = Math.ceil(
       (expiryDate - new Date()) / (1000 * 60 * 60 * 24)
     );
@@ -151,7 +151,7 @@ const MyDomains = () => {
               <div className="flex items-center space-x-4 mt-3 text-sm text-gray-600">
                 <div className="flex items-center space-x-1">
                   <CalendarIcon className="h-4 w-4" />
-                  <span>Expires: {expiryDate.toLocaleDateString()}</span>
+                  <span>Expires: {expiryDate.toDateString()}</span>
                 </div>
                 {daysUntilExpiry <= 30 && (
                   <div className="text-red-600 font-medium">

@@ -166,14 +166,14 @@ const MyDomains = () => {
 
           <div className="flex flex-col space-y-2">
             <button
-              onClick={() => navigate(`/domains/${domain._id || domain.id}`)}
+              onClick={() => navigate(`/domains/${domain.id}`)}
               className="btn-primary text-sm flex items-center space-x-1"
             >
               <span>Manage Domain</span>
               <ArrowRightIcon className="h-4 w-4" />
             </button>
             <button
-              onClick={() => handleManageDNS(domain._id, domain.fullDomain)}
+              onClick={() => handleManageDNS(domain.id, domain.full_domain)}
               className="btn-outline text-sm flex items-center space-x-1"
             >
               <Cog6ToothIcon className="h-4 w-4" />

@@ -1,6 +1,7 @@
 const axios = require("axios");
 const { parseString } = require("xml2js");
 const supabase = require("../config/database.js");
+const dns = require('dns').promises;
 
 class NamecheapService {
   constructor() {
@@ -1134,6 +1135,134 @@ class NamecheapService {
         message: error.message || "An error occurred while getting DNS records" 
       };
     }
+  }
+
+  // Check DNS propagation for a specific record
+  async checkDnsPropagation(subdomain, domainName, recordType, expectedValue) {
+    try {
+      const fullDomain = subdomain ? `${subdomain}.${domainName}` : domainName;
+      console.log(`🔍 Checking DNS propagation for: ${fullDomain} (${recordType}) expecting: ${expectedValue}`);
+      
+      let actualValue = null;
+      let propagated = false;
+
+      try {
+        switch (recordType.toUpperCase()) {
+          case 'A':
+            const aRecords = await dns.resolve4(fullDomain);
+            actualValue = aRecords[0];
+            propagated = aRecords.includes(expectedValue);
+            break;
+            
+          case 'AAAA':
+            const aaaaRecords = await dns.resolve6(fullDomain);
+            actualValue = aaaaRecords[0];
+            propagated = aaaaRecords.includes(expectedValue);
+            break;
+            
+          case 'CNAME':
+            const cnameRecords = await dns.resolveCname(fullDomain);
+            actualValue = cnameRecords[0];
+            // CNAME records might have trailing dots
+            const expectedClean = expectedValue.endsWith('.') ? expectedValue.slice(0, -1) : expectedValue;
+            const actualClean = actualValue.endsWith('.') ? actualValue.slice(0, -1) : actualValue;
+            propagated = actualClean === expectedClean;
+            break;
+            
+          case 'MX':
+            const mxRecords = await dns.resolveMx(fullDomain);
+            actualValue = mxRecords.map(mx => `${mx.priority} ${mx.exchange}`).join(', ');
+            propagated = mxRecords.some(mx => mx.exchange === expectedValue || mx.exchange === expectedValue + '.');
+            break;
+            
+          case 'TXT':
+            const txtRecords = await dns.resolveTxt(fullDomain);
+            actualValue = txtRecords.map(txt => txt.join(' ')).join('; ');
+            propagated = txtRecords.some(txt => txt.join(' ') === expectedValue);
+            break;
+            
+          case 'NS':
+            const nsRecords = await dns.resolveNs(fullDomain);
+            actualValue = nsRecords.join(', ');
+            propagated = nsRecords.includes(expectedValue) || nsRecords.includes(expectedValue + '.');
+            break;
+            
+          default:
+            console.warn(`⚠️ Unsupported record type for propagation check: ${recordType}`);
+            return { 
+              success: false, 
+              propagated: false, 
+              message: `Unsupported record type: ${recordType}` 
+            };
+        }
+
+        console.log(`🔍 DNS propagation check result:`, {
+          domain: fullDomain,
+          recordType,
+          expected: expectedValue,
+          actual: actualValue,
+          propagated
+        });
+
+        return {
+          success: true,
+          propagated,
+          actualValue,
+          expectedValue,
+          recordType,
+          domain: fullDomain
+        };
+
+      } catch (dnsError) {
+        // DNS lookup failed - record probably not propagated yet
+        console.log(`⏳ DNS lookup failed for ${fullDomain} (${recordType}): ${dnsError.message}`);
+        return {
+          success: true,
+          propagated: false,
+          actualValue: null,
+          expectedValue,
+          recordType,
+          domain: fullDomain,
+          error: dnsError.message
+        };
+      }
+
+    } catch (error) {
+      console.error("❌ Error checking DNS propagation:", error);
+      return { 
+        success: false, 
+        message: error.message || "An error occurred while checking DNS propagation" 
+      };
+    }
+  }
+
+  // Check propagation with retry logic
+  async checkDnsPropagationWithRetry(subdomain, domainName, recordType, expectedValue, maxRetries = 10, delay = 30000) {
+    console.log(`🔄 Starting DNS propagation check with retry for: ${subdomain}.${domainName}`);
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`⏱️ DNS propagation check attempt ${attempt}/${maxRetries}`);
+      
+      const result = await this.checkDnsPropagation(subdomain, domainName, recordType, expectedValue);
+      
+      if (result.success && result.propagated) {
+        console.log(`✅ DNS propagated successfully on attempt ${attempt}`);
+        return result;
+      }
+      
+      if (attempt < maxRetries) {
+        console.log(`⏳ DNS not propagated yet, waiting ${delay/1000} seconds before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    console.log(`❌ DNS propagation failed after ${maxRetries} attempts`);
+    return {
+      success: true,
+      propagated: false,
+      attempts: maxRetries,
+      message: `DNS propagation not confirmed after ${maxRetries} attempts`
+    };
   }
 }
 

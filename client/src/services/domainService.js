@@ -340,7 +340,18 @@ export const domainService = {
   getDNSRecords: async (domainId) => {
     try {
       const response = await api.get(`/domains/${domainId}/dns`);
-      return response.data.success ? response.data.data : response.data;
+      const data = response.data.success ? response.data.data : response.data;
+      const records = data.records || data;
+      
+      // Transform records to match frontend expectations
+      return records.map((record, index) => ({
+        id: index + 1, // Add ID for frontend
+        name: record.name,
+        type: record.type,
+        value: record.address || record.value, // Map "address" to "value"
+        ttl: record.ttl,
+        priority: record.mxPref || record.priority
+      }));
     } catch (error) {
       console.warn("API not available, returning mock data");
       return [
@@ -355,6 +366,64 @@ export const domainService = {
           ttl: 3600,
         },
       ];
+    }
+  },
+
+  // Add DNS record (creates a subdomain)
+  addDNSRecord: async (domainName, record) => {
+    try {
+      // First get the domain ID from the domain name
+      const domains = await domainService.getUserDomains();
+      const domain = domains.domains.find(d => d.full_domain === domainName);
+      
+      if (!domain) {
+        throw new Error('Domain not found');
+      }
+
+      // Create subdomain using our subdomain API
+      const subdomainData = {
+        subdomain_name: record.name === '@' ? 'root' : record.name,
+        record_type: record.type,
+        target_value: record.value,
+        ttl: record.ttl || 3600,
+        priority: record.priority
+      };
+
+      const response = await api.post(`/domains/${domain.id}/subdomains`, subdomainData);
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.warn("Add DNS record failed:", error.message);
+      throw error;
+    }
+  },
+
+  // Delete DNS record (deletes a subdomain)
+  deleteDNSRecord: async (domainName, recordId) => {
+    try {
+      // First get the domain ID from the domain name
+      const domains = await domainService.getUserDomains();
+      const domain = domains.domains.find(d => d.full_domain === domainName);
+      
+      if (!domain) {
+        throw new Error('Domain not found');
+      }
+
+      // Get subdomains to find the one to delete
+      const subdomains = await api.get(`/domains/${domain.id}/subdomains`);
+      const subdomainList = subdomains.data.data.subdomains || [];
+      
+      // Find subdomain by index (recordId is the array index)
+      const subdomainToDelete = subdomainList[recordId - 1]; // recordId is 1-based
+      
+      if (!subdomainToDelete) {
+        throw new Error('DNS record not found');
+      }
+
+      const response = await api.delete(`/domains/${domain.id}/subdomains/${subdomainToDelete.id}`);
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.warn("Delete DNS record failed:", error.message);
+      throw error;
     }
   },
 

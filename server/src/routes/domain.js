@@ -6,6 +6,8 @@ const {
   purchaseDomain,
   getUserDomains,
   getDomainById,
+  getDomainDnsRecords,
+  updateDomainDnsRecords,
 } = require("../controllers/domainController.js");
 const {
   getSubdomains,
@@ -29,6 +31,18 @@ router.get("/my-domains", getUserDomains);
 router.get("/:id", 
   param('id').isInt().withMessage('Domain ID must be a valid integer'),
   getDomainById
+);
+
+// DNS management routes
+router.get("/:id/dns", 
+  param('id').isInt().withMessage('Domain ID must be a valid integer'),
+  getDomainDnsRecords
+);
+
+router.put("/:id/dns", 
+  param('id').isInt().withMessage('Domain ID must be a valid integer'),
+  body('dnsRecords').isArray().withMessage('dnsRecords must be an array'),
+  updateDomainDnsRecords
 );
 
 // Subdomain routes - nested under domains

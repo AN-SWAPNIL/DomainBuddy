@@ -281,21 +281,102 @@ const createSubdomain = async (req, res, next) => {
       });
     }
 
-    // TODO: In a real implementation, you might want to create the DNS record 
-    // with your DNS provider (Namecheap) here
+    // Create the actual DNS record with Namecheap
+    console.log(`🌐 Creating DNS record for subdomain: ${subdomain_name}.${domain.full_domain}`);
     
-    // For now, we'll just mark it as active since we're simulating
-    const { error: updateError } = await supabase
-      .from("subdomains")
-      .update({ 
-        status: 'active',
-        dns_propagated: true,
-        last_checked: new Date().toISOString()
-      })
-      .eq("id", newSubdomain.id);
+    try {
+      const dnsResult = await namecheapService.createDnsRecord(
+        domain.full_domain,
+        subdomain_name,
+        record_type,
+        target_value,
+        ttl
+      );
 
-    if (updateError) {
-      console.error("Error updating subdomain status:", updateError);
+      if (dnsResult.success) {
+        console.log(`✅ DNS record created successfully for ${subdomain_name}.${domain.full_domain}`);
+        
+        // Update subdomain status to active since DNS was created
+        const { error: updateError } = await supabase
+          .from("subdomains")
+          .update({ 
+            status: 'active',
+            dns_created: true,
+            dns_propagated: false, // Will be checked later
+            last_checked: new Date().toISOString()
+          })
+          .eq("id", newSubdomain.id);
+
+        if (updateError) {
+          console.error("Error updating subdomain status:", updateError);
+        }
+
+        // Start DNS propagation check in the background (don't wait for it)
+        setImmediate(async () => {
+          try {
+            console.log(`🔍 Starting background DNS propagation check for ${subdomain_name}.${domain.full_domain}`);
+            const propagationResult = await namecheapService.checkDnsPropagationWithRetry(
+              subdomain_name,
+              domain.full_domain,
+              record_type,
+              target_value,
+              3, // max 3 retries
+              10000 // 10 second delay
+            );
+
+            if (propagationResult.propagated) {
+              await supabase
+                .from("subdomains")
+                .update({ 
+                  dns_propagated: true,
+                  last_checked: new Date().toISOString()
+                })
+                .eq("id", newSubdomain.id);
+              
+              console.log(`✅ DNS propagation confirmed for ${subdomain_name}.${domain.full_domain}`);
+            } else {
+              console.log(`⏳ DNS propagation pending for ${subdomain_name}.${domain.full_domain}`);
+            }
+          } catch (propagationError) {
+            console.error(`❌ DNS propagation check failed for ${subdomain_name}.${domain.full_domain}:`, propagationError);
+          }
+        });
+
+      } else {
+        console.error(`❌ Failed to create DNS record: ${dnsResult.message}`);
+        
+        // Mark subdomain as failed
+        await supabase
+          .from("subdomains")
+          .update({ 
+            status: 'failed',
+            dns_error: dnsResult.message,
+            last_checked: new Date().toISOString()
+          })
+          .eq("id", newSubdomain.id);
+
+        return res.status(500).json({
+          success: false,
+          message: `Failed to create DNS record: ${dnsResult.message}`,
+        });
+      }
+    } catch (dnsError) {
+      console.error("DNS creation error:", dnsError);
+      
+      // Mark subdomain as failed
+      await supabase
+        .from("subdomains")
+        .update({ 
+          status: 'failed',
+          dns_error: dnsError.message,
+          last_checked: new Date().toISOString()
+        })
+        .eq("id", newSubdomain.id);
+
+      return res.status(500).json({
+        success: false,
+        message: `Failed to create DNS record: ${dnsError.message}`,
+      });
     }
 
     // Fetch the complete subdomain data
@@ -433,19 +514,143 @@ const updateSubdomain = async (req, res, next) => {
       });
     }
 
-    // TODO: Update DNS record with provider (Namecheap)
+    // Update the actual DNS record with Namecheap
+    console.log(`🌐 Updating DNS record for subdomain: ${existingSubdomain.subdomain_name}.${domain.full_domain}`);
     
-    // For now, mark as active
-    const { error: statusUpdateError } = await supabase
-      .from("subdomains")
-      .update({ 
-        status: 'active',
-        last_checked: new Date().toISOString()
-      })
-      .eq("id", subdomainId);
+    try {
+      // Check what needs to be updated
+      const needsDnsUpdate = 
+        updateData.target_value !== undefined || 
+        updateData.ttl !== undefined ||
+        updateData.record_type !== undefined ||
+        updateData.subdomain_name !== undefined;
 
-    if (statusUpdateError) {
-      console.error("Error updating subdomain status:", statusUpdateError);
+      if (needsDnsUpdate) {
+        // If subdomain name is changing, we need to delete old and create new
+        if (updateData.subdomain_name && updateData.subdomain_name !== existingSubdomain.subdomain_name) {
+          console.log(`🔄 Subdomain name changing from ${existingSubdomain.subdomain_name} to ${updateData.subdomain_name}`);
+          
+          // Delete old DNS record
+          const deleteResult = await namecheapService.deleteDnsRecord(
+            domain.full_domain,
+            existingSubdomain.subdomain_name,
+            existingSubdomain.record_type
+          );
+
+          if (!deleteResult.success) {
+            console.error(`❌ Failed to delete old DNS record: ${deleteResult.message}`);
+            // Continue anyway as the old record might not exist
+          }
+
+          // Create new DNS record with new name
+          const createResult = await namecheapService.createDnsRecord(
+            domain.full_domain,
+            updateData.subdomain_name,
+            newRecordType,
+            newTargetValue,
+            updateData.ttl || existingSubdomain.ttl
+          );
+
+          if (!createResult.success) {
+            throw new Error(`Failed to create new DNS record: ${createResult.message}`);
+          }
+        } else {
+          // Update existing DNS record
+          const updateResult = await namecheapService.updateDnsRecord(
+            domain.full_domain,
+            existingSubdomain.subdomain_name,
+            newRecordType,
+            newTargetValue,
+            updateData.ttl || existingSubdomain.ttl,
+            existingSubdomain.target_value
+          );
+
+          if (!updateResult.success) {
+            throw new Error(`Failed to update DNS record: ${updateResult.message}`);
+          }
+        }
+
+        console.log(`✅ DNS record updated successfully`);
+        
+        // Update subdomain status to active since DNS was updated
+        const { error: statusUpdateError } = await supabase
+          .from("subdomains")
+          .update({ 
+            status: 'active',
+            dns_created: true,
+            dns_propagated: false, // Will be checked later
+            last_checked: new Date().toISOString()
+          })
+          .eq("id", subdomainId);
+
+        if (statusUpdateError) {
+          console.error("Error updating subdomain status:", statusUpdateError);
+        }
+
+        // Start DNS propagation check in the background
+        const finalSubdomainName = updateData.subdomain_name || existingSubdomain.subdomain_name;
+        setImmediate(async () => {
+          try {
+            console.log(`🔍 Starting background DNS propagation check for ${finalSubdomainName}.${domain.full_domain}`);
+            const propagationResult = await namecheapService.checkDnsPropagationWithRetry(
+              finalSubdomainName,
+              domain.full_domain,
+              newRecordType,
+              newTargetValue,
+              3, // max 3 retries
+              10000 // 10 second delay
+            );
+
+            if (propagationResult.propagated) {
+              await supabase
+                .from("subdomains")
+                .update({ 
+                  dns_propagated: true,
+                  last_checked: new Date().toISOString()
+                })
+                .eq("id", subdomainId);
+              
+              console.log(`✅ DNS propagation confirmed for ${finalSubdomainName}.${domain.full_domain}`);
+            } else {
+              console.log(`⏳ DNS propagation pending for ${finalSubdomainName}.${domain.full_domain}`);
+            }
+          } catch (propagationError) {
+            console.error(`❌ DNS propagation check failed for ${finalSubdomainName}.${domain.full_domain}:`, propagationError);
+          }
+        });
+
+      } else {
+        // No DNS changes needed, just mark as active
+        const { error: statusUpdateError } = await supabase
+          .from("subdomains")
+          .update({ 
+            status: 'active',
+            last_checked: new Date().toISOString()
+          })
+          .eq("id", subdomainId);
+
+        if (statusUpdateError) {
+          console.error("Error updating subdomain status:", statusUpdateError);
+        }
+      }
+
+    } catch (dnsError) {
+      console.error("DNS update error:", dnsError);
+      
+      // Mark subdomain as failed
+      await supabase
+        .from("subdomains")
+        .update({ 
+          status: 'failed',
+          dns_error: dnsError.message,
+          last_checked: new Date().toISOString()
+        })
+        .eq("id", subdomainId);
+
+      return res.status(500).json({
+        success: false,
+        message: `Failed to update DNS record: ${dnsError.message}`,
+      });
     }
 
     // Fetch the complete updated subdomain data
@@ -511,7 +716,26 @@ const deleteSubdomain = async (req, res, next) => {
       });
     }
 
-    // TODO: Delete DNS record from provider (Namecheap)
+    // Delete the actual DNS record from Namecheap
+    console.log(`🌐 Deleting DNS record for subdomain: ${subdomainToDelete.subdomain_name}.${domain.full_domain}`);
+    
+    try {
+      const dnsResult = await namecheapService.deleteDnsRecord(
+        domain.full_domain,
+        subdomainToDelete.subdomain_name,
+        subdomainToDelete.record_type
+      );
+
+      if (!dnsResult.success) {
+        console.error(`❌ Failed to delete DNS record: ${dnsResult.message}`);
+        // Continue with database deletion anyway, as the record might not exist
+      } else {
+        console.log(`✅ DNS record deleted successfully for ${subdomainToDelete.subdomain_name}.${domain.full_domain}`);
+      }
+    } catch (dnsError) {
+      console.error("DNS deletion error:", dnsError);
+      // Continue with database deletion anyway
+    }
 
     // Soft delete by marking as inactive
     const { error: deleteError } = await supabase

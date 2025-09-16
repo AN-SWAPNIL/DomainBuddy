@@ -259,8 +259,7 @@ const AIConsultant = () => {
       console.error("Domain purchase error:", error);
 
       // Handle specific error messages (same as DomainSearch)
-      let errorContent =
-        "I'm sorry, but there was an issue initiating the purchase for this domain. Please try again or contact support if the problem persists.";
+      let errorContent = `I'm sorry, but there was an issue initiating the purchase for this domain: ${error.message || 'Unknown error'}. Please try again or contact support if the problem persists.`;
       if (error.message?.includes("not available")) {
         errorContent = `❌ ${domain.name} is no longer available for registration. It may have been purchased by another user or already exists in our system.`;
       } else if (error.message?.includes("auth")) {

@@ -18,15 +18,25 @@ const Dashboard = () => {
   const { user } = useAuth();
   const [recentDomains, setRecentDomains] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchRecentDomains = async () => {
       try {
         setLoading(true);
-        const domains = await domainService.recentDomains();
-        setRecentDomains(domains || []);
+        setError(null);
+        const response = await domainService.recentDomains();
+        
+        // Check if response contains error information
+        if (response.error) {
+          setError(response.message);
+          setRecentDomains([]);
+        } else {
+          setRecentDomains(response.data || response || []);
+        }
       } catch (error) {
         console.error("Error fetching recent domains:", error);
+        setError("Unable to load recent domains");
         setRecentDomains([]);
       } finally {
         setLoading(false);
@@ -156,6 +166,21 @@ const Dashboard = () => {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
               <p className="text-gray-600 mt-2">Loading recent domains...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <div className="text-red-500 mb-4">
+                <Globe className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p className="text-red-600 font-medium">Error loading domains</p>
+                <p className="text-red-500 text-sm mt-1">{error}</p>
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center"
+              >
+                Try again
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </button>
             </div>
           ) : recentDomains.length === 0 ? (
             <div className="text-center py-8">

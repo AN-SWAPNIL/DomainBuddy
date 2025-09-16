@@ -1522,6 +1522,7 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
             cost: cost,
             selling_price: sellingPrice,
             currency: "USD",
+            expiration_date: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },

@@ -46,7 +46,7 @@ const Navbar = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
             <Globe className="w-8 h-8 text-primary-600" />
-            <span className="text-xl font-bold text-gray-900">DomainAgent</span>
+            <span className="text-xl font-bold text-gray-900">DomainBuddy</span>
           </Link>
 
           {/* Desktop Navigation */}

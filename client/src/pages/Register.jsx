@@ -79,7 +79,7 @@ const Register = () => {
           >
             <Globe className="w-10 h-10 text-primary-600" />
             <span className="text-2xl font-bold text-gray-900">
-              DomainAgent
+              DomainBuddy
             </span>
           </Link>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">

@@ -54,7 +54,7 @@ const Home = () => {
       name: "Sarah Johnson",
       role: "Startup Founder",
       content:
-        "DomainAgent helped me find the perfect domain for my tech startup. The AI suggestions were spot-on!",
+        "DomainBuddy helped me find the perfect domain for my tech startup. The AI suggestions were spot-on!",
       rating: 5,
     },
     {
@@ -124,7 +124,7 @@ const Home = () => {
             className="text-center mb-16"
           >
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Why Choose DomainAgent?
+              Why Choose DomainBuddy?
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
               Our AI-powered platform combines advanced technology with domain

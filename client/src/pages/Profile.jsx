@@ -65,138 +65,55 @@ const Profile = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             First Name
           </label>
-          <input
-            type="text"
-            value={profileData.first_name}
-            onChange={(e) =>
-              setProfileData({ ...profileData, first_name: e.target.value })
-            }
-            className="input-field"
-            required
-          />
+          <p>{profileData.first_name}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Last Name
           </label>
-          <input
-            type="text"
-            value={profileData.last_name}
-            onChange={(e) =>
-              setProfileData({ ...profileData, last_name: e.target.value })
-            }
-            className="input-field"
-            required
-          />
+          <p>{profileData.last_name}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Email Address
           </label>
-          <input
-            type="email"
-            value={profileData.email}
-            onChange={(e) =>
-              setProfileData({ ...profileData, email: e.target.value })
-            }
-            className="input-field"
-            required
-          />
+          <p>{profileData.email}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Phone Number
           </label>
-          <input
-            type="tel"
-            value={profileData.phone}
-            onChange={(e) =>
-              setProfileData({ ...profileData, phone: e.target.value })
-            }
-            className="input-field"
-          />
+          <p>{profileData.phone}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Street Address
           </label>
-          <input
-            type="text"
-            value={profileData.street}
-            onChange={(e) =>
-              setProfileData({ ...profileData, street: e.target.value })
-            }
-            className="input-field"
-          />
+          <p>{profileData.street}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             City
           </label>
-          <input
-            type="text"
-            value={profileData.city}
-            onChange={(e) =>
-              setProfileData({ ...profileData, city: e.target.value })
-            }
-            className="input-field"
-          />
+          <p>{profileData.city}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             State/Province
           </label>
-          <input
-            type="text"
-            value={profileData.state}
-            onChange={(e) =>
-              setProfileData({ ...profileData, state: e.target.value })
-            }
-            className="input-field"
-          />
+          <p>{profileData.state}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             ZIP/Postal Code
           </label>
-          <input
-            type="text"
-            value={profileData.zip_code}
-            onChange={(e) =>
-              setProfileData({ ...profileData, zip_code: e.target.value })
-            }
-            className="input-field"
-          />
+          <p>{profileData.zip_code}</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Country
           </label>
-          <select
-            value={profileData.country}
-            onChange={(e) =>
-              setProfileData({ ...profileData, country: e.target.value })
-            }
-            className="input-field"
-          >
-            <option value="US">United States</option>
-            <option value="CA">Canada</option>
-            <option value="GB">United Kingdom</option>
-            <option value="AU">Australia</option>
-            <option value="DE">Germany</option>
-            <option value="FR">France</option>
-            <option value="IN">India</option>
-            <option value="CN">China</option>
-            <option value="BR">Brazil</option>
-            <option value="MX">Mexico</option>
-            <option value="IT">Italy</option>
-            <option value="ES">Spain</option>
-            <option value="NL">Netherlands</option>
-            <option value="SE">Sweden</option>
-            <option value="NO">Norway</option>
-            <option value="DK">Denmark</option>
-            <option value="FI">Finland</option>
-          </select>
+          <p>{profileData.country}</p>
         </div>
       </div>
       <div className="flex justify-end">

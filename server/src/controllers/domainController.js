@@ -548,11 +548,36 @@ const updateDomainDnsRecords = async (req, res, next) => {
   }
 };
 
+const recentDomains = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    
+    const { data, error } = await supabase
+      .from("domains")
+      .select("*")
+      .eq("owner_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (error) {
+      throw error;
+    }
+
+    return res.json({ 
+      success: true, 
+      data 
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   searchDomains,
   checkAvailability,
   purchaseDomain,
   getUserDomains,
+  recentDomains,
   getDomainById,
   getDomainDnsRecords,
   updateDomainDnsRecords,

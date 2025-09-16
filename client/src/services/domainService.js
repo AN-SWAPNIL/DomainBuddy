@@ -164,6 +164,16 @@ export const domainService = {
     }
   },
 
+  recentDomains: async () => {
+    try {
+      const response = await api.get("/domains/recent");
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.warn("API not available, returning mock data");
+      return [];
+    }
+  },
+
   // Get domain suggestions
   getSuggestions: async (keyword) => {
     try {

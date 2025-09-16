@@ -76,16 +76,16 @@ const searchDomains = async (req, res, next) => {
       ".com", ".net", ".org", ".io", ".co", 
       // Business & professional
       ".biz", ".info", ".pro", ".name", ".mobi",
-      // // Modern & tech extensions
-      // ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store", ".shop",
-      // // Geographic & country
-      // ".us", ".uk", ".ca", ".au", ".de", ".fr", ".it", ".es", ".nl",
-      // // Creative & media
-      // ".design", ".art", ".photo", ".video", ".music", ".blog", ".news",
-      // // Industry specific
-      // ".agency", ".consulting", ".marketing", ".finance", ".legal", ".health",
-      // // Newer popular extensions
-      // ".xyz", ".top", ".click", ".link", ".download", ".email", ".website"
+      // Modern & tech extensions
+      ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store", ".shop",
+      // Geographic & country
+      ".us", ".uk", ".ca", ".au", ".de", ".fr", ".it", ".es", ".nl",
+      // Creative & media
+      ".design", ".art", ".photo", ".video", ".music", ".blog", ".news",
+      // Industry specific
+      ".agency", ".consulting", ".marketing", ".finance", ".legal", ".health",
+      // Newer popular extensions
+      ".xyz", ".top", ".click", ".link", ".download", ".email", ".website"
     ];
 
     const { q: query, extensions = namecheapStyleExtensions } = req.query;
@@ -99,7 +99,7 @@ const searchDomains = async (req, res, next) => {
       : extensions.split(",");
 
     // Limit to 25 extensions for performance but comprehensive coverage
-    const limitedExtensions = extensionArray.slice(0, 25);
+    const limitedExtensions = extensionArray.slice(0, 10); // TODO: Change back to all after testing and demonstration
 
     // Check availability for direct matches with Promise.allSettled for better error handling
     const domainChecks = limitedExtensions.map(async (ext) => {

@@ -445,21 +445,6 @@ const Settings = () => {
           </div>
         </form>
       </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Two-Factor Authentication
-        </h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-gray-600">Secure your account with 2FA</p>
-            <p className="text-sm text-gray-500">
-              Add an extra layer of security to your account
-            </p>
-          </div>
-          <button className="btn-outline">Enable 2FA</button>
-        </div>
-      </div>
     </motion.div>
   );
 

@@ -135,7 +135,6 @@ const Settings = () => {
   const tabs = [
     { id: "profile", label: "Profile", icon: UserIcon },
     { id: "security", label: "Security", icon: ShieldCheckIcon },
-    { id: "billing", label: "Billing", icon: CreditCardIcon },
   ];
 
   const ProfileTab = () => (
@@ -445,83 +444,6 @@ const Settings = () => {
           </div>
         </form>
       </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Two-Factor Authentication
-        </h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-gray-600">Secure your account with 2FA</p>
-            <p className="text-sm text-gray-500">
-              Add an extra layer of security to your account
-            </p>
-          </div>
-          <button className="btn-outline">Enable 2FA</button>
-        </div>
-      </div>
-    </motion.div>
-  );
-
-  const BillingTab = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="space-y-6"
-    >
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900">Payment Methods</h3>
-          <button className="btn-primary">Add Payment Method</button>
-        </div>
-
-        {paymentMethods.length === 0 ? (
-          <div className="text-center py-8">
-            <CreditCardIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h4 className="text-lg font-medium text-gray-900 mb-2">
-              No payment methods
-            </h4>
-            <p className="text-gray-600 mb-4">
-              Add a payment method to purchase domains
-            </p>
-            <button className="btn-primary">Add Payment Method</button>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {paymentMethods.map((method, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
-              >
-                <div className="flex items-center space-x-3">
-                  <CreditCardIcon className="h-6 w-6 text-gray-400" />
-                  <div>
-                    <div className="font-medium">
-                      **** **** **** {method.last4}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {method.brand} • Expires {method.expiry}
-                    </div>
-                  </div>
-                </div>
-                <div className="space-x-2">
-                  <button className="btn-outline text-sm">Edit</button>
-                  <button className="text-red-600 text-sm">Remove</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-4">
-          Billing History
-        </h3>
-        <div className="text-center py-8 text-gray-500">
-          No billing history available
-        </div>
-      </div>
     </motion.div>
   );
 
@@ -531,8 +453,6 @@ const Settings = () => {
         return <ProfileTab />;
       case "security":
         return <SecurityTab />;
-      case "billing":
-        return <BillingTab />;
       default:
         return <ProfileTab />;
     }

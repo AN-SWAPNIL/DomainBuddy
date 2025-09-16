@@ -47,6 +47,7 @@ const DomainSearch = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDomains, setSelectedDomains] = useState(new Set());
+  const [purchaseError, setPurchaseError] = useState(null);
 
   // Debug: Log user data when component mounts or user changes
   useEffect(() => {
@@ -71,6 +72,21 @@ const DomainSearch = () => {
         const result = await domainService.checkAvailability(searchTerm);
         console.log("🔍 Domain availability result:", result);
 
+        // Check if result contains error information
+        if (result.error) {
+          setSearchResults([{
+            name: searchTerm,
+            available: false,
+            price: 0,
+            premium: false,
+            error: true,
+            errorMessage: result.message,
+            registrar: "System",
+            description: `Error: ${result.message}`,
+          }]);
+          return;
+        }
+
         // Convert single domain result to expected format
         const singleDomain = [
           {
@@ -79,7 +95,7 @@ const DomainSearch = () => {
             price: result.price,
             premium: false,
             registrar: "Namecheap",
-            description: `Availability check for ${searchTerm}`,
+            description: result.message || `Availability check for ${searchTerm}`,
           },
         ];
 
@@ -93,6 +109,21 @@ const DomainSearch = () => {
         );
         const results = await domainService.searchDomains(searchTerm);
         console.log("🔍 Domain search results:", results);
+
+        // Check if results contain error information
+        if (results.error) {
+          setSearchResults([{
+            name: searchTerm,
+            available: false,
+            price: 0,
+            premium: false,
+            error: true,
+            errorMessage: results.message,
+            registrar: "System",
+            description: `Error: ${results.message}`,
+          }]);
+          return;
+        }
 
         // The API returns {query: 'searchTerm', results: []}
         // Convert results to the expected format
@@ -122,10 +153,17 @@ const DomainSearch = () => {
       }
     } catch (error) {
       console.error("Search error:", error);
-      // Show user-friendly error message
-      alert(
-        "Search failed. Please try again or check your internet connection."
-      );
+      // Show error in results instead of alert
+      setSearchResults([{
+        name: searchTerm || "search",
+        available: false,
+        price: 0,
+        premium: false,
+        error: true,
+        errorMessage: "Service temporarily unavailable. Please try again later.",
+        registrar: "System",
+        description: "Error: Service temporarily unavailable. Please try again later.",
+      }]);
     } finally {
       setLoading(false);
     }
@@ -158,9 +196,12 @@ const DomainSearch = () => {
   };
 
   const proceedWithPurchase = async (domainName) => {
+    // Clear any previous purchase errors
+    setPurchaseError(null);
+    
     // Prevent multiple purchases of the same domain
     if (purchasedDomains.has(domainName)) {
-      alert(`${domainName} has already been added to your cart!`);
+      setPurchaseError(`${domainName} has already been added to your cart!`);
       return;
     }
 
@@ -190,20 +231,20 @@ const DomainSearch = () => {
           domainName
         )}&amount=${amount}&transaction=${transactionId}`;
       } else {
-        alert("Purchase failed. Please try again.");
+        setPurchaseError("Purchase failed. Please try again.");
       }
     } catch (error) {
       console.error("Purchase error:", error);
 
       // Handle specific error messages
-      let errorMessage = "Purchase failed. Please try again.";
+      let errorMessage = `Purchase failed: ${error.message || 'Unknown error. Please try again.'}`;
       if (error.message?.includes("not available")) {
-        errorMessage = `❌ ${domainName} is no longer available for registration.\n\nIt may have been purchased by another user or already exists in our system.`;
+        errorMessage = `❌ ${domainName} is no longer available for registration. It may have been purchased by another user or already exists in our system.`;
       } else if (error.message?.includes("auth")) {
         errorMessage = "Please log in to purchase domains.";
       }
 
-      alert(errorMessage);
+      setPurchaseError(errorMessage);
     }
   };
 
@@ -324,28 +365,92 @@ const DomainSearch = () => {
         {/* Search Results */}
         {searchResults.length > 0 && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Search Results ({searchResults.length} domains found)
-              </h2>
-              {searchResults.length > 10 && (
-                <div className="text-sm text-gray-500">
-                  Showing comprehensive results like Namecheap for "{searchTerm}"
+            {/* Purchase Error Messages Section */}
+            {purchaseError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <h3 className="text-sm font-medium text-red-800">Purchase Error</h3>
+                    <div className="mt-2 text-sm text-red-700">
+                      {purchaseError}
+                    </div>
+                  </div>
+                  <div className="ml-4 flex-shrink-0">
+                    <button
+                      onClick={() => setPurchaseError(null)}
+                      className="inline-flex text-red-400 hover:text-red-500"
+                    >
+                      <span className="sr-only">Dismiss</span>
+                      <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Search Error Messages Section */}
+            {searchResults.some(domain => domain.error) && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">
+                      Search Error
+                    </h3>
+                    <div className="mt-2 text-sm text-red-700">
+                      {searchResults.find(domain => domain.error)?.errorMessage}
+                    </div>
+                    <div className="mt-3">
+                      <button
+                        onClick={() => handleSearch()}
+                        className="bg-red-100 px-3 py-1 rounded text-sm text-red-800 hover:bg-red-200 transition-colors"
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Normal Results */}
+            {!searchResults.some(domain => domain.error) && (
+              <>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    Search Results ({searchResults.length} domains found)
+                  </h2>
+                  {searchResults.length > 10 && (
+                    <div className="text-sm text-gray-500">
+                      Showing comprehensive results like Namecheap for "{searchTerm}"
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
             
             {/* Results Grid - organized by availability and price */}
             <div className="space-y-6">
               {/* Available Domains Section */}
-              {searchResults.filter(domain => domain.available).length > 0 && (
+              {searchResults.filter(domain => !domain.error && domain.available).length > 0 && (
                 <div>
                   <h3 className="text-lg font-medium text-green-700 mb-3">
-                    Available Domains ({searchResults.filter(domain => domain.available).length})
+                    Available Domains ({searchResults.filter(domain => !domain.error && domain.available).length})
                   </h3>
                   <div className="grid gap-4">
                     {searchResults
-                      .filter(domain => domain.available)
+                      .filter(domain => !domain.error && domain.available)
                       .sort((a, b) => a.price - b.price) // Sort by price
                       .map((domain, index) => (
                         <DomainCard
@@ -359,14 +464,14 @@ const DomainSearch = () => {
               )}
               
               {/* Unavailable Domains Section */}
-              {searchResults.filter(domain => !domain.available).length > 0 && (
+              {searchResults.filter(domain => !domain.error && !domain.available).length > 0 && (
                 <div>
                   <h3 className="text-lg font-medium text-gray-600 mb-3">
-                    Unavailable Domains ({searchResults.filter(domain => !domain.available).length})
+                    Unavailable Domains ({searchResults.filter(domain => !domain.error && !domain.available).length})
                   </h3>
                   <div className="grid gap-4">
                     {searchResults
-                      .filter(domain => !domain.available)
+                      .filter(domain => !domain.error && !domain.available)
                       .map((domain, index) => (
                         <DomainCard
                           key={`unavailable-${domain.name}-${index}`}

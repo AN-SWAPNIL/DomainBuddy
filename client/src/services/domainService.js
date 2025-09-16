@@ -28,101 +28,13 @@ export const domainService = {
       return data;
     } catch (error) {
       console.error("❌ Domain search API error:", error.message);
-      
-      if (error.name === 'AbortError' || error.message.includes('timeout')) {
-        console.warn("⏰ Domain search timed out, returning limited results");
-        // Return comprehensive results with popular extensions like Namecheap
-        const namecheapStyleExtensions = [
-          ".com", ".net", ".org", ".io", ".co", ".biz", ".info", ".pro",
-          ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store"
-        ];
-        const extensionArray = extensions.length > 0 ? extensions : namecheapStyleExtensions;
-        const results = extensionArray.slice(0, 15).map((ext) => ({
-          domain: `${q}${ext}`,
-          available: true, // Assume available for timeout cases
-          price: ext === '.com' ? 12.99 : 
-                 ext === '.net' ? 13.99 : 
-                 ext === '.org' ? 14.99 :
-                 ext === '.io' ? 49.99 :
-                 ext === '.co' ? 24.99 :
-                 ext === '.ai' ? 99.99 :
-                 ext === '.app' ? 18.99 :
-                 ext === '.dev' ? 12.99 :
-                 ext === '.tech' ? 49.99 :
-                 ext === '.online' ? 39.99 :
-                 ext === '.site' ? 29.99 :
-                 ext === '.store' ? 59.99 :
-                 ext === '.biz' ? 13.99 :
-                 ext === '.info' ? 11.99 :
-                 ext === '.pro' ? 18.99 : 15.99,
-          currency: "USD",
-          isPremium: ['.ai', '.io', '.tech', '.store'].includes(ext),
-          message: "Check availability - service was slow to respond",
-          timeout: true
-        }));
-        
-        return {
-          query: q,
-          results: results
-        };
-      }
-      
-      console.warn("API not available, returning mock data");
-      // Comprehensive mock data similar to Namecheap search results
-      const namecheapStyleExtensions = [
-        ".com", ".net", ".org", ".io", ".co", ".biz", ".info", ".pro", ".name",
-        ".ai", ".app", ".dev", ".tech", ".online", ".site", ".store", ".shop",
-        ".us", ".uk", ".ca", ".design", ".xyz"
-      ];
-      const extensionArray = extensions.length > 0 ? extensions : namecheapStyleExtensions;
-      const directMatches = extensionArray.slice(0, 20).map((ext) => ({
-        domain: `${q}${ext}`,
-        available: Math.random() > 0.5,
-        price: ext === '.com' ? 12.99 : 
-               ext === '.net' ? 13.99 : 
-               ext === '.org' ? 14.99 :
-               ext === '.io' ? 49.99 :
-               ext === '.co' ? 24.99 :
-               ext === '.ai' ? 99.99 :
-               ext === '.app' ? 18.99 :
-               ext === '.dev' ? 12.99 :
-               ext === '.tech' ? 49.99 :
-               ext === '.online' ? 39.99 :
-               ext === '.site' ? 29.99 :
-               ext === '.store' ? 59.99 :
-               ext === '.biz' ? 13.99 :
-               ext === '.info' ? 11.99 :
-               ext === '.pro' ? 18.99 :
-               ext === '.us' ? 8.99 :
-               ext === '.uk' ? 8.99 :
-               ext === '.design' ? 49.99 :
-               ext === '.xyz' ? 13.99 : Math.floor(Math.random() * 30) + 10,
-        premium: ['.ai', '.io', '.tech', '.store', '.design'].includes(ext) || Math.random() > 0.8,
-        registrar: "Namecheap",
-        description: `Perfect domain for your ${q} business`,
-      }));
-      
-      const aiSuggestions = [
-        {
-          domain: `${q}-hub.com`,
-          brandabilityScore: 8,
-          reasoning: `${q}-hub.com sounds professional and modern.`,
-        },
-        {
-          domain: `get${q}.io`,
-          brandabilityScore: 7,
-          reasoning: `Great for a tech startup or app.`,
-        },
-        {
-          domain: `${q}pro.net`,
-          brandabilityScore: 8,
-          reasoning: `Professional and trustworthy domain name.`,
-        },
-      ];
-      
+      console.warn("Returning empty results with error message");
       return {
-        directMatches,
-        aiSuggestions,
+        query: q,
+        results: [],
+        directMatches: [],
+        error: true,
+        message: error.message || "Search service temporarily unavailable"
       };
     }
   },
@@ -133,12 +45,14 @@ export const domainService = {
       const response = await api.get(`/domains/check/${domain}`);
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
+      console.error("❌ Error checking domain availability:", error.message);
       return {
         domain,
-        available: Math.random() > 0.5,
-        price: Math.floor(Math.random() * 50) + 10,
-        premium: Math.random() > 0.8,
+        available: false,
+        price: 0,
+        premium: false,
+        error: true,
+        message: error.message || "Unable to check availability - please try again later"
       };
     }
   },
@@ -149,17 +63,21 @@ export const domainService = {
       const response = await api.get(`/domains/details/${domain}`);
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
+      console.error("❌ Error fetching domain details:", error.message);
+      throw error;
+    }
+  },
+
+  recentDomains: async () => {
+    try {
+      const response = await api.get("/domains/recent");
+      return response.data.success ? response.data.data : response.data;
+    } catch (error) {
+      console.error("❌ Error fetching recent domains:", error.message);
       return {
-        domain,
-        available: Math.random() > 0.5,
-        price: Math.floor(Math.random() * 50) + 10,
-        premium: Math.random() > 0.8,
-        analysis: {
-          seoScore: Math.floor(Math.random() * 100),
-          brandability: Math.floor(Math.random() * 100),
-          memorability: Math.floor(Math.random() * 100),
-        },
+        error: true,
+        message: error.message || "Unable to load recent domains",
+        data: []
       };
     }
   },
@@ -172,49 +90,12 @@ export const domainService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      const suggestions = [];
-      const extensions = [".com", ".net", ".org", ".io", ".co", ".ai", ".app"];
-      const prefixes = [
-        "get",
-        "my",
-        "best",
-        "go",
-        "try",
-        "the",
-        "super",
-        "top",
-      ];
-      const suffixes = [
-        "ly",
-        "ify",
-        "hub",
-        "zone",
-        "base",
-        "pro",
-        "app",
-        "site",
-      ];
-      for (let i = 0; i < 10; i++) {
-        const variation =
-          Math.random() > 0.5
-            ? `${
-                prefixes[Math.floor(Math.random() * prefixes.length)]
-              }${keyword}`
-            : `${keyword}${
-                suffixes[Math.floor(Math.random() * suffixes.length)]
-              }`;
-        suggestions.push({
-          name: `${variation}${
-            extensions[Math.floor(Math.random() * extensions.length)]
-          }`,
-          available: Math.random() > 0.3,
-          price: Math.floor(Math.random() * 40) + 12,
-          premium: Math.random() > 0.85,
-          score: Math.floor(Math.random() * 40) + 60,
-        });
-      }
-      return suggestions;
+      console.error("❌ Error fetching domain suggestions:", error.message);
+      return {
+        error: true,
+        message: error.message || "Unable to load domain suggestions",
+        data: []
+      };
     }
   },
 
@@ -227,33 +108,8 @@ export const domainService = {
       console.log("API response:", response);
       return response.data;
     } catch (error) {
-      console.warn("API not available, returning mock purchase data");
-      // Mock purchase result matching backend response format
-      // return {
-      //   success: true,
-      //   data: {
-      //     domain: {
-      //       id: `mock-domain-${Math.floor(Math.random() * 100000)}`,
-      //       name: domainData.domain.split(".")[0],
-      //       extension: domainData.domain.split(".").slice(1).join("."),
-      //       full_domain: domainData.domain,
-      //       selling_price: 12.99,
-      //       currency: "USD",
-      //       status: "pending",
-      //     },
-      //     transaction: {
-      //       id: `mock-tx-${Math.floor(Math.random() * 100000)}`,
-      //       amount: 12.99,
-      //       currency: "USD",
-      //       status: "pending",
-      //     },
-      //     message: "Domain purchase initiated. Complete payment to finalize.",
-      //   },
-      // };
-      return {
-        success: false,
-        message: error.message || "Domain purchase failed"
-      };
+      console.error("❌ Error purchasing domain:", error.message);
+      throw error;
     }
   },
 
@@ -265,45 +121,14 @@ export const domainService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      // Mock user domains
-      // return {
-      //   domains: [
-      //     {
-      //       id: 1,
-      //       name: "myawesomeapp.com",
-      //       status: "active",
-      //       expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      //       traffic: 1250,
-      //       estimatedValue: 2500,
-      //       age: 2,
-      //     },
-      //     {
-      //       id: 2,
-      //       name: "startupidea.io",
-      //       status: "expiring",
-      //       expiryDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
-      //       traffic: 850,
-      //       estimatedValue: 1800,
-      //       age: 1,
-      //     },
-      //     {
-      //       id: 3,
-      //       name: "techblog.net",
-      //       status: "active",
-      //       expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-      //       traffic: 3200,
-      //       estimatedValue: 5000,
-      //       age: 3,
-      //     },
-      //   ],
-      //   total: 3,
-      //   page,
-      //   limit,
-      // };
+      console.error("❌ Error fetching user domains:", error.message);
       return {
-        success: false,
-        message: error.message || "Failed to fetch user domains"
+        domains: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+        error: true,
+        message: error.message || "Unable to load your domains"
       };
     }
   },
@@ -327,12 +152,8 @@ export const domainService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      return {
-        success: true,
-        message: "DNS records updated successfully",
-        records: dnsRecords,
-      };
+      console.error("❌ Error updating DNS records:", error.message);
+      throw error;
     }
   },
 
@@ -353,19 +174,12 @@ export const domainService = {
         priority: record.mxPref || record.priority
       }));
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      return [
-        { id: 1, type: "A", name: "@", value: "192.168.1.1", ttl: 3600 },
-        { id: 2, type: "CNAME", name: "www", value: "@", ttl: 3600 },
-        {
-          id: 3,
-          type: "MX",
-          name: "@",
-          value: "mail.example.com",
-          priority: 10,
-          ttl: 3600,
-        },
-      ];
+      console.error("❌ Error fetching DNS records:", error.message);
+      return {
+        error: true,
+        message: error.message || "Unable to load DNS records",
+        data: []
+      };
     }
   },
 
@@ -436,14 +250,8 @@ export const domainService = {
       });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      return {
-        success: true,
-        transferId: `transfer_${Date.now()}`,
-        domain,
-        status: "pending",
-        estimatedCompletion: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      };
+      console.error("❌ Error transferring domain:", error.message);
+      throw error;
     }
   },
 
@@ -453,15 +261,8 @@ export const domainService = {
       const response = await api.post(`/domains/${domainId}/renew`, { years });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      return {
-        success: true,
-        domain: "example.com",
-        years,
-        cost: years * 15,
-        newExpiryDate: new Date(Date.now() + years * 365 * 24 * 60 * 60 * 1000),
-        transactionId: `renewal_${Date.now()}`,
-      };
+      console.error("❌ Error renewing domain:", error.message);
+      throw error;
     }
   },
 
@@ -471,27 +272,8 @@ export const domainService = {
       const response = await api.get(`/domains/pricing/${tld}`);
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      const basePrices = {
-        ".com": 12.99,
-        ".net": 14.99,
-        ".org": 13.99,
-        ".io": 59.99,
-        ".co": 34.99,
-        ".ai": 99.99,
-        ".app": 19.99,
-        ".dev": 12.99,
-        ".tech": 49.99,
-      };
-
-      const basePrice = basePrices[tld] || 15.99;
-      return {
-        tld,
-        registration: basePrice,
-        renewal: basePrice,
-        transfer: basePrice - 2,
-        premium: basePrice * 2,
-      };
+      console.error("❌ Error fetching domain pricing:", error.message);
+      throw error;
     }
   },
 
@@ -501,14 +283,12 @@ export const domainService = {
       const response = await api.post("/domains/bulk-search", { domains });
       return response.data.success ? response.data.data : response.data;
     } catch (error) {
-      console.warn("API not available, returning mock data");
-      return domains.map((domain) => ({
-        name: domain,
-        available: Math.random() > 0.5,
-        price: Math.floor(Math.random() * 50) + 10,
-        premium: Math.random() > 0.8,
-        category: "standard",
-      }));
+      console.error("❌ Error bulk searching domains:", error.message);
+      return {
+        error: true,
+        message: error.message || "Unable to search domains",
+        data: []
+      };
     }
   },
 };

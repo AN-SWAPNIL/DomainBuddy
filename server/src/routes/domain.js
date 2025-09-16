@@ -5,6 +5,7 @@ const {
   checkAvailability,
   purchaseDomain,
   getUserDomains,
+  recentDomains,
   getDomainById,
   getDomainDnsRecords,
   updateDomainDnsRecords,
@@ -20,14 +21,15 @@ const authMiddleware = require("../middleware/auth.js");
 
 const router = express.Router();
 
-// Public routes
-router.get("/search", searchDomains);
-router.get("/check/:domain", checkAvailability);
 
 // Protected routes
+
 router.use(authMiddleware);
+router.get("/search", searchDomains);
+router.get("/check/:domain", checkAvailability);
 router.post("/purchase", purchaseDomain);
 router.get("/my-domains", getUserDomains);
+router.get("/recent", recentDomains);
 router.get("/:id", 
   param('id').isInt().withMessage('Domain ID must be a valid integer'),
   getDomainById

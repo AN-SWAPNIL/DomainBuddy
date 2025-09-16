@@ -18,11 +18,14 @@ import { domainService } from "../services/domainService";
 const MyDomains = () => {
   const [domains, setDomains] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [selectedDomain, setSelectedDomain] = useState(null); // Will store { id, name }
   const [showDNSModal, setShowDNSModal] = useState(false);
+  const [selectedDomain, setSelectedDomain] = useState(null);
   const [dnsRecords, setDnsRecords] = useState([]);
+  const [dnsError, setDnsError] = useState(null);
+  const [renewalError, setRenewalError] = useState(null);
   const navigate = useNavigate();
 
   const statusFilters = [
@@ -38,20 +41,30 @@ const MyDomains = () => {
 
   const fetchDomains = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const response = await domainService.getUserDomains();
       console.log("Domains response:", response); // Debug log
-      // Handle paginated response structure
-      if (response.docs) {
-        setDomains(response.docs);
-      } else if (response.domains) {
-        setDomains(response.domains);
-      } else if (Array.isArray(response)) {
-        setDomains(response);
-      } else {
+      
+      // Check if response contains error information
+      if (response.error) {
+        setError(response.message);
         setDomains([]);
+      } else {
+        // Handle paginated response structure
+        if (response.docs) {
+          setDomains(response.docs);
+        } else if (response.domains) {
+          setDomains(response.domains);
+        } else if (Array.isArray(response)) {
+          setDomains(response);
+        } else {
+          setDomains([]);
+        }
       }
     } catch (error) {
       console.error("Error fetching domains:", error);
+      setError("Unable to load your domains");
       setDomains([]);
     } finally {
       setLoading(false);
@@ -60,24 +73,43 @@ const MyDomains = () => {
 
   const handleRenewDomain = async (domainName) => {
     try {
-      await domainService.renewDomain(domainName);
+      setRenewalError(null); // Clear any previous renewal errors
+      const result = await domainService.renewDomain(domainName);
+      
+      if (result && result.error) {
+        setRenewalError(`Failed to renew ${domainName}: ${result.message}`);
+        return;
+      }
+      
       fetchDomains(); // Refresh the list
-      alert(`${domainName} has been renewed successfully!`);
+      // Show success message inline (you could add a success state here if needed)
     } catch (error) {
       console.error("Renewal error:", error);
-      alert("Failed to renew domain. Please try again.");
+      setRenewalError(`Failed to renew ${domainName}. Please try again.`);
     }
   };
 
   const handleManageDNS = async (domainId, domainName) => {
     try {
-      const records = await domainService.getDNSRecords(domainId);
-      setDnsRecords(records);
+      const response = await domainService.getDNSRecords(domainId);
+      
+      // Check if response contains error information
+      if (response.error) {
+        setDnsError(response.message);
+        setDnsRecords([]);
+      } else {
+        setDnsError(null);
+        setDnsRecords(response.data || response || []);
+      }
+      
       setSelectedDomain({ id: domainId, name: domainName });
-      setShowDNSModal(true);
+      setShowDnsModal(true);
     } catch (error) {
       console.error("DNS error:", error);
-      alert("Failed to load DNS records.");
+      setDnsError("Failed to load DNS records");
+      setDnsRecords([]);
+      setSelectedDomain({ id: domainId, name: domainName });
+      setShowDnsModal(true);
     }
   };
 
@@ -86,7 +118,7 @@ const MyDomains = () => {
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesFilter =
-      filterStatus === "all" || domain.status === filterStatus;
+      statusFilter === "all" || domain.status === statusFilter;
     return matchesSearch && matchesFilter;
   });
 
@@ -242,30 +274,53 @@ const MyDomains = () => {
 
     const handleAddRecord = async () => {
       try {
-        await domainService.addDNSRecord(selectedDomain.name, newRecord);
+        setDnsError(null); // Clear any previous errors
+        const addResult = await domainService.addDNSRecord(selectedDomain.name, newRecord);
+        
+        if (addResult && addResult.error) {
+          setDnsError(addResult.message);
+          return;
+        }
+
         const updatedRecords = await domainService.getDNSRecords(
           selectedDomain.id
         );
-        setDnsRecords(updatedRecords);
+        
+        if (updatedRecords && updatedRecords.error) {
+          setDnsError("DNS record may have been added, but failed to reload records: " + updatedRecords.message);
+        } else {
+          setDnsRecords(updatedRecords);
+        }
+        
         setNewRecord({ type: "A", name: "", value: "", ttl: 3600 });
-        alert("DNS record added successfully!");
       } catch (error) {
         console.error("Add DNS record error:", error);
-        alert("Failed to add DNS record.");
+        setDnsError("Failed to add DNS record. Please try again.");
       }
     };
 
     const handleDeleteRecord = async (recordId) => {
       try {
-        await domainService.deleteDNSRecord(selectedDomain.name, recordId);
+        setDnsError(null); // Clear any previous errors
+        const deleteResult = await domainService.deleteDNSRecord(selectedDomain.name, recordId);
+        
+        if (deleteResult && deleteResult.error) {
+          setDnsError(deleteResult.message);
+          return;
+        }
+
         const updatedRecords = await domainService.getDNSRecords(
           selectedDomain.id
         );
-        setDnsRecords(updatedRecords);
-        alert("DNS record deleted successfully!");
+        
+        if (updatedRecords && updatedRecords.error) {
+          setDnsError("DNS record may have been deleted, but failed to reload records: " + updatedRecords.message);
+        } else {
+          setDnsRecords(updatedRecords);
+        }
       } catch (error) {
         console.error("Delete DNS record error:", error);
-        alert("Failed to delete DNS record.");
+        setDnsError("Failed to delete DNS record. Please try again.");
       }
     };
 
@@ -293,6 +348,33 @@ const MyDomains = () => {
           </div>
 
           <div className="p-6">
+            {/* DNS Error Display */}
+            {dnsError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <h3 className="text-sm font-medium text-red-800">DNS Operation Failed</h3>
+                    <p className="mt-1 text-sm text-red-700">{dnsError}</p>
+                  </div>
+                  <div className="ml-4 flex-shrink-0">
+                    <button
+                      onClick={() => setDnsError(null)}
+                      className="inline-flex text-red-400 hover:text-red-500"
+                    >
+                      <span className="sr-only">Dismiss</span>
+                      <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Add New Record */}
             <div className="bg-gray-50 rounded-lg p-4 mb-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
@@ -419,6 +501,26 @@ const MyDomains = () => {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <GlobeAltIcon className="h-12 w-12 text-red-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">
+            Error Loading Domains
+          </h3>
+          <p className="text-red-600 mb-6">{error}</p>
+          <button 
+            className="btn-primary"
+            onClick={fetchDomains}
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -427,11 +529,42 @@ const MyDomains = () => {
             <h1 className="text-3xl font-bold text-gray-900">My Domains</h1>
             <p className="text-gray-600 mt-1">Manage your domain portfolio</p>
           </div>
-          <button className="btn-primary flex items-center space-x-2">
+          <button 
+            className="btn-primary flex items-center space-x-2"
+            onClick={() => navigate('/search')}
+          >
             <PlusIcon className="h-4 w-4" />
             <span>Add Domain</span>
           </button>
         </div>
+
+        {/* Renewal Error Display */}
+        {renewalError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-red-800">Domain Renewal Failed</h3>
+                <p className="mt-1 text-sm text-red-700">{renewalError}</p>
+              </div>
+              <div className="ml-4 flex-shrink-0">
+                <button
+                  onClick={() => setRenewalError(null)}
+                  className="inline-flex text-red-400 hover:text-red-500"
+                >
+                  <span className="sr-only">Dismiss</span>
+                  <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Search and Filter Bar */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
@@ -449,8 +582,8 @@ const MyDomains = () => {
             <div className="flex items-center space-x-2">
               <FunnelIcon className="h-4 w-4 text-gray-500" />
               <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
                 className="input"
               >
                 {statusFilters.map((filter) => (
@@ -541,11 +674,16 @@ const MyDomains = () => {
               No domains found
             </h3>
             <p className="text-gray-600 mb-6">
-              {searchTerm || filterStatus !== "all"
+              {searchTerm || statusFilter !== "all"
                 ? "Try adjusting your search or filter criteria."
                 : "Get started by purchasing your first domain."}
             </p>
-            <button className="btn-primary">Search Domains</button>
+            <button 
+              className="btn-primary"
+              onClick={() => navigate('/search')}
+            >
+              Search Domains
+            </button>
           </div>
         )}
 

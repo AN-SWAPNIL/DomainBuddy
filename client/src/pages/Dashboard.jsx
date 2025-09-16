@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Globe,
@@ -12,61 +12,41 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { Link } from "react-router-dom";
+import { domainService } from "../services/domainService";
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const [recentDomains, setRecentDomains] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const stats = [
-    {
-      title: "Total Domains",
-      value: "12",
-      icon: Globe,
-      color: "bg-blue-500",
-      change: "+2 this month",
-    },
-    {
-      title: "Domain Value",
-      value: "$24,500",
-      icon: DollarSign,
-      color: "bg-green-500",
-      change: "+12% increase",
-    },
-    {
-      title: "Expiring Soon",
-      value: "3",
-      icon: Clock,
-      color: "bg-yellow-500",
-      change: "Next 30 days",
-    },
-    {
-      title: "AI Consultations",
-      value: "8",
-      icon: Bot,
-      color: "bg-purple-500",
-      change: "This month",
-    },
-  ];
+  useEffect(() => {
+    const fetchRecentDomains = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await domainService.recentDomains();
+        
+        // Check if response contains error information
+        if (response.error) {
+          setError(response.message);
+          setRecentDomains([]);
+        } else {
+          setRecentDomains(response.data || response || []);
+        }
+      } catch (error) {
+        console.error("Error fetching recent domains:", error);
+        setError("Unable to load recent domains");
+        setRecentDomains([]);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const recentDomains = [
-    {
-      name: "techstartup.com",
-      status: "Active",
-      expiryDate: "2025-06-15",
-      value: "$2,500",
-    },
-    {
-      name: "myapp.io",
-      status: "Active",
-      expiryDate: "2025-08-22",
-      value: "$1,800",
-    },
-    {
-      name: "brandname.net",
-      status: "Pending",
-      expiryDate: "2025-07-10",
-      value: "$3,200",
-    },
-  ];
+    fetchRecentDomains();
+  }, []);
+
+  const stats = [];
 
   const quickActions = [
     {
@@ -182,40 +162,79 @@ const Dashboard = () => {
         </div>
 
         <div className="space-y-4">
-          {recentDomains.map((domain, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-            >
-              <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <Globe className="w-5 h-5 text-primary-600" />
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <p className="text-gray-600 mt-2">Loading recent domains...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <div className="text-red-500 mb-4">
+                <Globe className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p className="text-red-600 font-medium">Error loading domains</p>
+                <p className="text-red-500 text-sm mt-1">{error}</p>
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center"
+              >
+                Try again
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </button>
+            </div>
+          ) : recentDomains.length === 0 ? (
+            <div className="text-center py-8">
+              <Globe className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">No domains found</p>
+              <Link
+                to="/search"
+                className="text-primary-600 hover:text-primary-700 text-sm font-medium inline-flex items-center mt-2"
+              >
+                Search for domains
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </Link>
+            </div>
+          ) : (
+            recentDomains.map((domain, index) => (
+              <div
+                key={domain.id || index}
+                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                    <Globe className="w-5 h-5 text-primary-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      {domain.full_domain || domain.domain_name || domain.name}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {domain.expiry_date 
+                        ? `Expires: ${new Date(domain.expiry_date).toLocaleDateString()}`
+                        : `Added: ${new Date(domain.created_at).toLocaleDateString()}`
+                      }
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">{domain.name}</h3>
-                  <p className="text-sm text-gray-600">
-                    Expires: {new Date(domain.expiryDate).toLocaleDateString()}
+                <div className="text-right">
+                  <div className="flex items-center space-x-2">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        (domain.status || 'active').toLowerCase() === "active"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-yellow-100 text-yellow-800"
+                      }`}
+                    >
+                      {domain.status || 'Active'}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium text-gray-900 mt-1">
+                    {domain.value}
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="flex items-center space-x-2">
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      domain.status === "Active"
-                        ? "bg-green-100 text-green-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }`}
-                  >
-                    {domain.status}
-                  </span>
-                </div>
-                <p className="text-sm font-medium text-gray-900 mt-1">
-                  {domain.value}
-                </p>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         <div className="mt-6 text-center">

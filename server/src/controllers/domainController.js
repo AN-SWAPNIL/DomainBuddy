@@ -126,7 +126,7 @@ const searchDomains = async (req, res, next) => {
         return {
           domain,
           available: false,
-          price: 12.99,
+          price: 0.00,
           currency: "USD",
           isPremium: false,
           message: "Unable to check availability",
@@ -149,7 +149,7 @@ const searchDomains = async (req, res, next) => {
         searchResults.push({
           domain: `${query}.com`,
           available: false,
-          price: 12.99,
+          price: 0.00,
           currency: "USD",
           isPremium: false,
           message: "Service temporarily unavailable",

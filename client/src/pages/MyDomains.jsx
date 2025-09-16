@@ -427,7 +427,10 @@ const MyDomains = () => {
             <h1 className="text-3xl font-bold text-gray-900">My Domains</h1>
             <p className="text-gray-600 mt-1">Manage your domain portfolio</p>
           </div>
-          <button className="btn-primary flex items-center space-x-2">
+          <button 
+            className="btn-primary flex items-center space-x-2"
+            onClick={() => navigate('/search')}
+          >
             <PlusIcon className="h-4 w-4" />
             <span>Add Domain</span>
           </button>
@@ -545,7 +548,12 @@ const MyDomains = () => {
                 ? "Try adjusting your search or filter criteria."
                 : "Get started by purchasing your first domain."}
             </p>
-            <button className="btn-primary">Search Domains</button>
+            <button 
+              className="btn-primary"
+              onClick={() => navigate('/search')}
+            >
+              Search Domains
+            </button>
           </div>
         )}
 

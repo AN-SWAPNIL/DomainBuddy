@@ -1,4 +1,4 @@
-# DomainBuddy 🌐
+# 🌐 DomainBuddy
 
 **AI-Powered Domain Buying Agent & Management Platform**
 
@@ -225,26 +225,6 @@ BCRYPT_SALT_ROUNDS=12
    - Open your browser to `http://localhost:5173`
    - Register a new account or use test credentials
    - Start exploring domain search and AI features
-
-### Production Deployment
-
-1. **Build the Frontend**
-   ```bash
-   cd client
-   npm run build
-   ```
-
-2. **Deploy Backend**
-   ```bash
-   cd server
-   npm start
-   ```
-
-3. **Configure Environment**
-   - Set `NODE_ENV=production`
-   - Use production database URLs
-   - Configure production CORS origins
-   - Set up SSL certificates
 
 
 ## 📚 API Documentation

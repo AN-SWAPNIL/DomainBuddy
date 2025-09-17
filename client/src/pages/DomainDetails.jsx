@@ -13,12 +13,14 @@ import {
 } from '@heroicons/react/24/outline';
 import { domainService } from '../services/domainService';
 import SubdomainManager from '../components/domains/SubdomainManager';
+import DNSManager from '../components/domains/DNSManager';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 
 const DomainDetails = () => {
   const [domain, setDomain] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('subdomains');
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -270,8 +272,11 @@ const DomainDetails = () => {
               </div>
               
               <div className="p-6 space-y-3">
-                <button className="w-full btn-outline text-sm">
-                  Configure DNS Settings
+                <button 
+                  onClick={() => setActiveTab('dns')}
+                  className="w-full btn-outline text-sm"
+                >
+                  View DNS Settings
                 </button>
                 <button className="w-full btn-outline text-sm">
                   Transfer Domain
@@ -288,9 +293,41 @@ const DomainDetails = () => {
             </div>
           </div>
 
-          {/* Subdomain Management */}
+          {/* Domain Management Tabs */}
           <div className="lg:col-span-2">
-            <SubdomainManager domain={domain} />
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+              {/* Tab Navigation */}
+              <div className="border-b border-gray-200">
+                <nav className="flex -mb-px">
+                  <button
+                    onClick={() => setActiveTab('subdomains')}
+                    className={`py-4 px-6 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'subdomains'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Subdomains
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('dns')}
+                    className={`py-4 px-6 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === 'dns'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    DNS Settings
+                  </button>
+                </nav>
+              </div>
+
+              {/* Tab Content */}
+              <div className="bg-gray-50">
+                {activeTab === 'subdomains' && <SubdomainManager domain={domain} />}
+                {activeTab === 'dns' && <DNSManager domain={domain} />}
+              </div>
+            </div>
           </div>
         </div>
       </div>

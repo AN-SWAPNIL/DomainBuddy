@@ -103,7 +103,7 @@ const MyDomains = () => {
       }
       
       setSelectedDomain({ id: domainId, name: domainName });
-      setShowDnsModal(true);
+      setShowDNSModal(true);
     } catch (error) {
       console.error("DNS error:", error);
       setDnsError("Failed to load DNS records");

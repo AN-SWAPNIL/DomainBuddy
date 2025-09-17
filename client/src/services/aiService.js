@@ -48,7 +48,7 @@ export const aiService = {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(new Error("AI request took too long. The AI might be processing complex domain searches. Please try again."));
-        }, 65000); // 65 seconds - slightly longer than API timeout (60 seconds)
+        }, import.meta.env.VITE_API_TIMEOUT + 5000); // 65 seconds - slightly longer than API timeout (60 seconds)
       });
 
       const requestPromise = api.post("/ai/chat", {

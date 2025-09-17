@@ -894,9 +894,24 @@ ${conversationContext}`;
               specificDomain: null 
             });
             const searchResults = JSON.parse(await tool._call(input));
+            
+            // Count available vs unavailable domains
+            const availableCount = searchResults.filter(d => d.available).length;
+            const totalCount = searchResults.length;
+            
+            // Create a more specific message based on results
+            let resultMessage;
+            if (availableCount === 0) {
+              resultMessage = `I checked ${totalCount} domains but none are available. Would you like me to suggest some creative alternatives?`;
+            } else if (availableCount === totalCount) {
+              resultMessage = `Great news! All ${totalCount} domains I found are available for registration.`;
+            } else {
+              resultMessage = `I found ${availableCount} available domains out of ${totalCount} checked.`;
+            }
+            
             result = {
               domains: searchResults,
-              message: `I found ${searchResults.length} domains for your search.`,
+              message: resultMessage,
               success: true
             };
           }
@@ -933,9 +948,24 @@ ${conversationContext}`;
             
             const input = JSON.stringify({ searchTerms: contextualTerms });
             const creativeDomains = JSON.parse(await tool._call(input));
+            
+            // Count available vs unavailable domains
+            const availableCount = creativeDomains.filter(d => d.available).length;
+            const totalCount = creativeDomains.length;
+            
+            // Create a more specific message based on results
+            let resultMessage;
+            if (availableCount === 0) {
+              resultMessage = `I generated ${totalCount} creative domain suggestions, but none are currently available. Let me try different variations.`;
+            } else if (availableCount === totalCount) {
+              resultMessage = `Excellent! All ${totalCount} creative domain suggestions I generated are available for registration.`;
+            } else {
+              resultMessage = `I found ${availableCount} available creative domain suggestions out of ${totalCount} generated.`;
+            }
+            
             result = {
               domains: creativeDomains,
-              message: `I found ${creativeDomains.length} creative domain suggestions for you.`,
+              message: resultMessage,
               success: true
             };
           } else if (state.userId) {
@@ -961,9 +991,15 @@ ${conversationContext}`;
             const tool = this.tools.find(t => t.name === "domain_check");
             const input = JSON.stringify({ domainName: state.domain });
             const domainInfo = JSON.parse(await tool._call(input));
+            
+            // Create a more specific message based on availability
+            const availabilityMessage = domainInfo.available 
+              ? `${state.domain} is available for $${domainInfo.price}!`
+              : `${state.domain} is not available (already registered).`;
+            
             result = {
               domains: [domainInfo],
-              message: `Here's the information for ${state.domain}.`,
+              message: availabilityMessage,
               success: true
             };
           }
@@ -1111,16 +1147,31 @@ ${conversationContext}`;
         // Build conversation context for better responses
         const conversationContext = state.userId ? this.buildContextFromHistory(state.userId) : "";
         
+        // Extract domain availability info for better context
+        const domainDetails = state.domains?.map(d => `${d.name}: ${d.available ? 'Available' : 'Not Available'} ($${d.price})`).join(', ') || 'None';
+        const availableCount = state.domains?.filter(d => d.available).length || 0;
+        const unavailableCount = state.domains?.filter(d => !d.available).length || 0;
+        
         const contextPrompt = `You are a friendly AI assistant for DomainBuddy. 
 Based on the action performed and results, provide a natural, helpful response to the user.
 
 Action performed: ${state.action}
 Intent: ${state.intent}
-Domains found: ${state.domains ? state.domains.length : 0}
+Total domains checked: ${state.domains ? state.domains.length : 0}
+Available domains: ${availableCount}
+Unavailable domains: ${unavailableCount}
+Domain details: ${domainDetails}
 Success: ${state.success}
 Current message: ${state.message}
 
-Make the response conversational and helpful. If domains were found, mention the count and encourage next steps.
+IMPORTANT RESPONSE RULES:
+1. If checking a specific domain and it's NOT available, clearly state that the domain is NOT available or already taken
+2. If checking a specific domain and it IS available, mention that it's available for purchase
+3. Never say "Great news, I found X domains" if the domains are NOT available
+4. For unavailable domains, suggest alternatives or ask if the user wants similar options
+5. Be accurate about availability status - don't give false hope
+
+Make the response conversational and helpful. If available domains were found, mention the count and encourage next steps.
 If a purchase was initiated, explain the next steps clearly.
 If this is a follow-up request (like asking for alternatives), acknowledge the context.
 

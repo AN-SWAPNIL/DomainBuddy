@@ -51,41 +51,35 @@ class DnsBackgroundService {
   async checkPendingDnsRecords() {
     try {
       console.log("🔍 Checking pending DNS records...");
+      
+      // Clean up old expired records first
+      await this.cleanupExpiredRecords();
 
-      // Get all subdomains that need DNS propagation checks
-      const { data: pendingSubdomains, error } = await supabase
-        .from("subdomains")
-        .select(`
-          id,
-          subdomain_name,
-          record_type,
-          target_value,
-          status,
-          dns_propagated,
-          last_checked,
-          retry_count,
-          domains!inner(full_domain)
-        `)
-        .eq("is_active", true)
-        .in("status", ["pending", "active"])
-        .eq("dns_propagated", false)
-        .lt("retry_count", 5); // Don't retry more than 5 times
+      // Get all pending DNS propagation records that are due for checking
+      const { data: pendingRecords, error } = await supabase
+        .from("dns_propagation_queue")
+        .select("*")
+        .eq("status", "pending")
+        .lt("next_check_at", new Date().toISOString())
+        .lt("check_count", 100) // Don't check records that have been checked too many times
+        .order("next_check_at", { ascending: true })
+        .limit(50); // Process 50 records at a time
 
       if (error) {
-        console.error("❌ Error fetching pending subdomains:", error);
+        console.error("❌ Error fetching pending DNS records:", error);
         return;
       }
 
-      if (!pendingSubdomains || pendingSubdomains.length === 0) {
+      if (!pendingRecords || pendingRecords.length === 0) {
         console.log("✅ No pending DNS records to check");
         return;
       }
 
-      console.log(`📋 Found ${pendingSubdomains.length} DNS records to check`);
+      console.log(`📋 Found ${pendingRecords.length} DNS records to check`);
 
-      // Process each subdomain
-      for (const subdomain of pendingSubdomains) {
-        await this.checkSubdomainPropagation(subdomain);
+      // Process each DNS record
+      for (const record of pendingRecords) {
+        await this.checkDnsRecordPropagation(record);
         
         // Add a small delay between checks to avoid overwhelming DNS servers
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -95,6 +89,183 @@ class DnsBackgroundService {
 
     } catch (error) {
       console.error("❌ Error in DNS background check:", error);
+    }
+  }
+
+  // Check DNS propagation for a specific record from the queue
+  async checkDnsRecordPropagation(record) {
+    try {
+      const fullDomain = `${record.subdomain}.${record.domain}`;
+      console.log(`🔍 Checking DNS propagation for: ${fullDomain} (${record.record_type})`);
+
+      // Use the namecheap service to check DNS propagation
+      const propagationResult = await namecheapService.checkDnsPropagation(
+        record.subdomain,
+        record.domain,
+        record.record_type,
+        record.expected_value
+      );
+
+      const newCheckCount = (record.check_count || 0) + 1;
+      const updateData = {
+        last_check_at: new Date().toISOString(),
+        check_count: newCheckCount
+      };
+
+      if (propagationResult.success && propagationResult.propagated) {
+        // DNS has propagated successfully
+        console.log(`✅ DNS propagation confirmed for ${fullDomain}`);
+        
+        updateData.status = 'confirmed';
+        updateData.last_error = null;
+
+        // Update the corresponding subdomain record
+        if (record.subdomain_id) {
+          await supabase
+            .from('subdomains')
+            .update({ 
+              status: 'active', 
+              dns_propagated: true,
+              last_checked: new Date().toISOString(),
+              dns_error: null
+            })
+            .eq('id', record.subdomain_id);
+        }
+
+        // Remove from propagation queue since it's confirmed
+        await supabase
+          .from('dns_propagation_queue')
+          .delete()
+          .eq('id', record.id);
+
+        console.log(`🗑️ Removed ${fullDomain} from propagation queue (confirmed)`);
+        return;
+
+      } else if (propagationResult.success && !propagationResult.propagated) {
+        // DNS not propagated yet, but no error - schedule next check
+        console.log(`⏳ DNS not yet propagated for ${fullDomain} (attempt ${newCheckCount})`);
+        
+        // Calculate exponential backoff for next check
+        const nextDelay = this.calculateBackoffDelay(newCheckCount);
+        updateData.next_check_at = new Date(Date.now() + nextDelay).toISOString();
+        updateData.last_error = null;
+        
+        // Check if we've exceeded max retries
+        if (newCheckCount >= record.max_retries) {
+          console.log(`❌ DNS propagation timed out after ${newCheckCount} attempts for ${fullDomain}`);
+          updateData.status = 'failed';
+          updateData.last_error = `DNS propagation timeout after ${newCheckCount} attempts`;
+          
+          // Update subdomain status
+          if (record.subdomain_id) {
+            await supabase
+              .from('subdomains')
+              .update({ 
+                status: 'failed',
+                dns_error: `DNS propagation timeout after ${newCheckCount} attempts`
+              })
+              .eq('id', record.subdomain_id);
+          }
+        }
+
+      } else {
+        // Error occurred during DNS check
+        console.log(`❌ DNS propagation check failed for ${fullDomain}: ${propagationResult.message}`);
+        
+        const nextDelay = this.calculateBackoffDelay(newCheckCount);
+        updateData.next_check_at = new Date(Date.now() + nextDelay).toISOString();
+        updateData.last_error = propagationResult.message;
+        
+        // Check if we've exceeded max retries
+        if (newCheckCount >= record.max_retries) {
+          updateData.status = 'failed';
+          
+          // Update subdomain status
+          if (record.subdomain_id) {
+            await supabase
+              .from('subdomains')
+              .update({ 
+                status: 'failed',
+                dns_error: propagationResult.message
+              })
+              .eq('id', record.subdomain_id);
+          }
+        }
+      }
+
+      // Update the propagation queue record
+      const { error: updateError } = await supabase
+        .from("dns_propagation_queue")
+        .update(updateData)
+        .eq("id", record.id);
+
+      if (updateError) {
+        console.error(`❌ Error updating DNS propagation record ${fullDomain}:`, updateError);
+      }
+
+    } catch (error) {
+      console.error(`❌ Error checking propagation for DNS record ${record.id}:`, error);
+      
+      // Update error status
+      await supabase
+        .from("dns_propagation_queue")
+        .update({
+          last_check_at: new Date().toISOString(),
+          check_count: (record.check_count || 0) + 1,
+          last_error: error.message,
+          next_check_at: new Date(Date.now() + 15 * 60 * 1000).toISOString() // Retry in 15 minutes
+        })
+        .eq("id", record.id);
+    }
+  }
+
+  // Calculate exponential backoff delay
+  calculateBackoffDelay(checkCount) {
+    // Exponential backoff: 5min, 15min, 45min, 2hr, 6hr, 12hr, 24hr (max)
+    const baseDelay = 5 * 60 * 1000; // 5 minutes
+    const maxDelay = 24 * 60 * 60 * 1000; // 24 hours
+    
+    const delay = Math.min(
+      baseDelay * Math.pow(3, Math.min(checkCount - 1, 6)), 
+      maxDelay
+    );
+    
+    console.log(`⏰ Next check scheduled in ${delay / (60 * 1000)} minutes for attempt ${checkCount}`);
+    return delay;
+  }
+
+  // Clean up expired records (older than 10 days)
+  async cleanupExpiredRecords() {
+    try {
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      
+      console.log(`🧹 Starting cleanup for records older than: ${tenDaysAgo.toISOString()}`);
+      
+      const { data: expiredRecords, error: selectError } = await supabase
+        .from('dns_propagation_queue')
+        .select('id, domain, subdomain, created_at')
+        .or(`created_at.lt.${tenDaysAgo.toISOString()},status.eq.confirmed`)
+        .limit(100);
+
+      if (selectError) {
+        console.error("Error selecting expired records:", selectError);
+        return;
+      }
+
+      if (expiredRecords && expiredRecords.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('dns_propagation_queue')
+          .delete()
+          .or(`created_at.lt.${tenDaysAgo.toISOString()},status.eq.confirmed`);
+
+        if (deleteError) {
+          console.error("Error cleaning up expired records:", deleteError);
+        } else {
+          console.log(`🗑️ Cleaned up ${expiredRecords.length} expired/confirmed DNS propagation records`);
+        }
+      }
+    } catch (error) {
+      console.error("Error in cleanup process:", error);
     }
   }
 

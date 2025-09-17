@@ -320,23 +320,16 @@ const createSubdomain = async (req, res, next) => {
               domain.full_domain,
               record_type,
               target_value,
-              3, // max 3 retries
+              newSubdomain.id, // Pass subdomain ID for background monitoring
+              3, // max 3 immediate retries
               10000 // 10 second delay
             );
 
-            if (propagationResult.propagated) {
-              await supabase
-                .from("subdomains")
-                .update({ 
-                  dns_propagated: true,
-                  last_checked: new Date().toISOString()
-                })
-                .eq("id", newSubdomain.id);
-              
-              console.log(`✅ DNS propagation confirmed for ${subdomain_name}.${domain.full_domain}`);
-            } else {
-              console.log(`⏳ DNS propagation pending for ${subdomain_name}.${domain.full_domain}`);
-            }
+            console.log(`📊 DNS propagation result for ${subdomain_name}.${domain.full_domain}:`, {
+              propagated: propagationResult.propagated,
+              backgroundMonitoring: propagationResult.backgroundMonitoring,
+              message: propagationResult.message
+            });
           } catch (propagationError) {
             console.error(`❌ DNS propagation check failed for ${subdomain_name}.${domain.full_domain}:`, propagationError);
           }

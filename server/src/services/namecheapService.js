@@ -1236,10 +1236,11 @@ class NamecheapService {
     }
   }
 
-  // Check propagation with retry logic
-  async checkDnsPropagationWithRetry(subdomain, domainName, recordType, expectedValue, maxRetries = 10, delay = 30000) {
+  // Check propagation with retry logic and background service integration
+  async checkDnsPropagationWithRetry(subdomain, domainName, recordType, expectedValue, subdomainId = null, maxRetries = 3, delay = 10000) {
     console.log(`🔄 Starting DNS propagation check with retry for: ${subdomain}.${domainName}`);
     
+    // Phase 1: Quick immediate checks (reduced from 10 to 3 attempts)
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       console.log(`⏱️ DNS propagation check attempt ${attempt}/${maxRetries}`);
       
@@ -1247,6 +1248,28 @@ class NamecheapService {
       
       if (result.success && result.propagated) {
         console.log(`✅ DNS propagated successfully on attempt ${attempt}`);
+        
+        // Update subdomain status if we have the ID
+        if (subdomainId) {
+          try {
+            const { error } = await supabase
+              .from('subdomains')
+              .update({ 
+                status: 'active', 
+                dns_propagated: true,
+                last_checked: new Date().toISOString(),
+                dns_error: null
+              })
+              .eq('id', subdomainId);
+              
+            if (error) {
+              console.error("Error updating subdomain propagation status:", error);
+            }
+          } catch (dbError) {
+            console.error("Database error updating subdomain:", dbError);
+          }
+        }
+        
         return result;
       }
       
@@ -1256,12 +1279,77 @@ class NamecheapService {
       }
     }
     
-    console.log(`❌ DNS propagation failed after ${maxRetries} attempts`);
+    // Phase 2: Schedule long-term monitoring via background service
+    console.log(`⏳ DNS propagation pending for ${subdomain}.${domainName} - scheduling background checks`);
+    
+    try {
+      // Calculate initial next check time (5 minutes from now)
+      const nextCheckAt = new Date(Date.now() + 5 * 60 * 1000);
+      
+      console.log(`🔍 Attempting to insert DNS record into queue:`, {
+        domain: domainName,
+        subdomain: subdomain,
+        record_type: recordType,
+        expected_value: expectedValue,
+        subdomain_id: subdomainId
+      });
+      
+      // Insert into DNS propagation queue for background monitoring
+      const { data, error } = await supabase
+        .from('dns_propagation_queue')
+        .upsert({
+          domain: domainName,
+          subdomain: subdomain,
+          record_type: recordType,
+          expected_value: expectedValue,
+          subdomain_id: subdomainId,
+          created_at: new Date().toISOString(),
+          next_check_at: nextCheckAt.toISOString(),
+          check_count: 0,
+          status: 'pending',
+          last_error: null
+        }, {
+          onConflict: 'domain,subdomain,record_type,expected_value',
+          ignoreDuplicates: false
+        });
+        
+      if (error) {
+        console.error("❌ Error queuing DNS record for background propagation checks:", error);
+        console.error("❌ Full error details:", JSON.stringify(error, null, 2));
+      } else {
+        console.log(`✅ Successfully queued ${subdomain}.${domainName} for background propagation checks`);
+        console.log(`📋 Queue insert result:`, data);
+        
+        // Update subdomain status to indicate background monitoring
+        if (subdomainId) {
+          const { error: updateError } = await supabase
+            .from('subdomains')
+            .update({ 
+              status: 'active', // Keep as active since DNS record was created
+              dns_propagated: false, // Still monitoring
+              last_checked: new Date().toISOString(),
+              dns_error: 'DNS propagation monitoring in progress'
+            })
+            .eq('id', subdomainId);
+            
+          if (updateError) {
+            console.error("❌ Error updating subdomain status:", updateError);
+          } else {
+            console.log(`✅ Updated subdomain ${subdomainId} status for background monitoring`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("❌ Exception while scheduling background propagation checks:", err);
+      console.error("❌ Exception stack:", err.stack);
+    }
+    
     return {
       success: true,
       propagated: false,
       attempts: maxRetries,
-      message: `DNS propagation not confirmed after ${maxRetries} attempts`
+      message: `DNS record created successfully. Propagation monitoring continues in background. This can take 15 minutes to 48 hours.`,
+      backgroundMonitoring: true
     };
   }
 }

@@ -527,7 +527,7 @@ class AIAgentService {
             console.error('❌ OTP verification error:', otpError);
             return {
               intent: 'otp_verification',
-              message: 'Sorry, I encountered an error verifying your code. Please try again.',
+              message: 'Sorry, I encountered an error verifying your code. Please start the domain purchase process again by telling me which domain you\'d like to buy.',
               success: false
             };
           }
@@ -1928,15 +1928,31 @@ Respond with ONLY a JSON array of strings: ["domain1", "domain2", "domain3", ...
       } else {
         return {
           success: false,
-          message: 'Invalid verification code. Please check the code and try again, or ask me to resend a new verification code.'
+          message: 'Invalid or expired verification code. Please start the domain purchase process again by telling me which domain you\'d like to buy.'
         };
       }
     } catch (error) {
       console.error('❌ Error verifying OTP for purchase:', error);
-      return {
-        success: false,
-        message: error.message || 'Sorry, I encountered an error during verification. Please try again.'
-      };
+      
+      // Handle specific OTP error types
+      const errorMessage = error.message || '';
+      
+      if (errorMessage.includes('Too many incorrect attempts')) {
+        return {
+          success: false,
+          message: 'Too many incorrect verification attempts. Please start the domain purchase process again by telling me which domain you\'d like to buy.'
+        };
+      } else if (errorMessage.includes('Invalid or expired verification code')) {
+        return {
+          success: false,
+          message: 'Invalid or expired verification code. Please start the domain purchase process again by telling me which domain you\'d like to buy.'
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Sorry, I encountered an error during verification. Please start the domain purchase process again by telling me which domain you\'d like to buy.'
+        };
+      }
     }
   }
 

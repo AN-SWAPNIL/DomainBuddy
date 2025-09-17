@@ -32,8 +32,12 @@ const DomainDetails = () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('🔍 DomainDetails - Fetching domain with ID:', id);
       const response = await domainService.getDomainById(id);
-      setDomain(response.data || response);
+      console.log('🔍 DomainDetails - Raw response:', response);
+      const domainData = response.data || response;
+      console.log('🔍 DomainDetails - Domain data:', domainData);
+      setDomain(domainData);
     } catch (err) {
       console.error('Failed to fetch domain details:', err);
       setError('Could not load domain details. Please try again later.');

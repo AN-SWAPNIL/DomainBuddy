@@ -4,7 +4,7 @@ const subdomainService = {
   // Get all subdomains for a domain
   getSubdomains: async (domainId) => {
     try {
-      console.log(`🔍 Fetching subdomains for domain: ${domainId}`);
+      console.log(`🔍 Fetching subdomains for domain ID: ${domainId}`);
       const response = await api.get(`/domains/${domainId}/subdomains`);
       console.log(`✅ Fetched subdomains:`, response.data);
       return response.data;

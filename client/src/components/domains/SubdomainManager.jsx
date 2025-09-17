@@ -25,12 +25,14 @@ const SubdomainManager = ({ domain }) => {
     if (domain?.id) {
       fetchSubdomains();
     }
-  }, [domain]);
+  }, [domain?.id]);
 
   const fetchSubdomains = async () => {
     try {
       setLoading(true);
       setError(null);
+      console.log('🔍 SubdomainManager - Domain object:', domain);
+      console.log('🔍 SubdomainManager - Domain ID being used:', domain.id);
       const response = await subdomainService.getSubdomains(domain.id);
       setSubdomains(response.data?.subdomains || []);
     } catch (err) {

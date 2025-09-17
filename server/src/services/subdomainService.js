@@ -22,32 +22,41 @@ class SubdomainService {
       // Format the hostname for DNS record
       const hostname = subdomain_name; // Just the subdomain part
       
-      // Prepare DNS record data based on type
-      const dnsRecordData = {
+      console.log(`🌐 Creating DNS record for ${hostname}.${domain}:`, {
         hostname,
-        recordtype: record_type,
+        recordType: record_type,
         address: target_value,
         ttl: ttl || 3600,
-      };
+        priority: priority
+      });
 
-      // Add priority for MX records
-      if (record_type === 'MX' && priority) {
-        dnsRecordData.mxpref = priority;
+      // Use actual Namecheap API to create DNS record
+      const result = await this.dnsProvider.createDnsRecord(
+        domain, 
+        hostname, 
+        record_type, 
+        target_value, 
+        ttl || 3600
+      );
+
+      if (result.success) {
+        console.log(`✅ DNS record created successfully for ${hostname}.${domain}`);
+        return {
+          success: true,
+          recordId: `${hostname}_${record_type}_${Date.now()}`, // Generate unique ID
+          message: `DNS record created for ${hostname}.${domain}`,
+          data: {
+            hostname,
+            recordtype: record_type,
+            address: target_value,
+            ttl: ttl || 3600,
+            priority: priority
+          }
+        };
+      } else {
+        console.error(`❌ Failed to create DNS record: ${result.message}`);
+        throw new Error(result.message || 'Failed to create DNS record');
       }
-
-      console.log(`🌐 Creating DNS record for ${hostname}.${domain}:`, dnsRecordData);
-
-      // Note: This would call the actual Namecheap API
-      // For now, we'll simulate the response
-      const response = {
-        success: true,
-        recordId: `dns_${Date.now()}`, // Simulated record ID
-        message: `DNS record created for ${hostname}.${domain}`,
-        data: dnsRecordData
-      };
-
-      console.log(`✅ DNS record created successfully:`, response);
-      return response;
 
     } catch (error) {
       console.error(`❌ Error creating DNS record:`, error);
@@ -64,19 +73,32 @@ class SubdomainService {
    */
   async updateDNSRecord(domain, recordId, updateData) {
     try {
+      const { subdomain_name, record_type, target_value, ttl, old_target_value } = updateData;
+      
       console.log(`🔄 Updating DNS record ${recordId} for domain ${domain}:`, updateData);
 
-      // Note: This would call the actual Namecheap API
-      // For now, we'll simulate the response
-      const response = {
-        success: true,
-        recordId,
-        message: `DNS record updated for ${domain}`,
-        data: updateData
-      };
+      // Use actual Namecheap API to update DNS record
+      const result = await this.dnsProvider.updateDnsRecord(
+        domain, 
+        subdomain_name, 
+        record_type, 
+        target_value, 
+        ttl || 3600, 
+        old_target_value
+      );
 
-      console.log(`✅ DNS record updated successfully:`, response);
-      return response;
+      if (result.success) {
+        console.log(`✅ DNS record updated successfully for ${subdomain_name}.${domain}`);
+        return {
+          success: true,
+          recordId,
+          message: `DNS record updated for ${subdomain_name}.${domain}`,
+          data: updateData
+        };
+      } else {
+        console.error(`❌ Failed to update DNS record: ${result.message}`);
+        throw new Error(result.message || 'Failed to update DNS record');
+      }
 
     } catch (error) {
       console.error(`❌ Error updating DNS record:`, error);
@@ -92,18 +114,32 @@ class SubdomainService {
    */
   async deleteDNSRecord(domain, recordId) {
     try {
-      console.log(`🗑️ Deleting DNS record ${recordId} for domain ${domain}`);
+      // Extract subdomain name and record type from recordId
+      // Expected format: "subdomain_recordtype_timestamp"
+      const parts = recordId.split('_');
+      const subdomainName = parts[0];
+      const recordType = parts[1];
+      
+      console.log(`🗑️ Deleting DNS record ${recordId} for domain ${domain} (${subdomainName}, ${recordType})`);
 
-      // Note: This would call the actual Namecheap API
-      // For now, we'll simulate the response
-      const response = {
-        success: true,
-        recordId,
-        message: `DNS record deleted for ${domain}`
-      };
+      // Use actual Namecheap API to delete DNS record
+      const result = await this.dnsProvider.deleteDnsRecord(
+        domain, 
+        subdomainName, 
+        recordType
+      );
 
-      console.log(`✅ DNS record deleted successfully:`, response);
-      return response;
+      if (result.success) {
+        console.log(`✅ DNS record deleted successfully for ${subdomainName}.${domain}`);
+        return {
+          success: true,
+          recordId,
+          message: `DNS record deleted for ${subdomainName}.${domain}`
+        };
+      } else {
+        console.error(`❌ Failed to delete DNS record: ${result.message}`);
+        throw new Error(result.message || 'Failed to delete DNS record');
+      }
 
     } catch (error) {
       console.error(`❌ Error deleting DNS record:`, error);
@@ -120,28 +156,25 @@ class SubdomainService {
     try {
       console.log(`📋 Fetching DNS records for domain ${domain}`);
 
-      // Note: This would call the actual Namecheap API
-      // For now, we'll simulate the response
-      const records = [
-        {
-          recordId: 'dns_123',
-          hostname: 'www',
-          recordType: 'A',
-          address: '192.168.1.1',
-          ttl: 3600
-        },
-        {
-          recordId: 'dns_124',
-          hostname: 'mail',
-          recordType: 'MX',
-          address: 'mail.example.com',
-          ttl: 3600,
-          priority: 10
-        }
-      ];
+      // Use actual Namecheap API to get DNS records
+      const result = await this.dnsProvider.getDnsRecords(domain);
 
-      console.log(`✅ Found ${records.length} DNS records for ${domain}`);
-      return records;
+      if (result.success) {
+        const records = result.records.map(record => ({
+          recordId: `${record.name}_${record.type}_${Date.now()}`, // Generate unique ID
+          hostname: record.name,
+          recordType: record.type,
+          address: record.address,
+          ttl: record.ttl,
+          priority: record.mxPref
+        }));
+
+        console.log(`✅ Found ${records.length} DNS records for ${domain}`);
+        return records;
+      } else {
+        console.error(`❌ Failed to fetch DNS records: ${result.message}`);
+        throw new Error(result.message || 'Failed to fetch DNS records');
+      }
 
     } catch (error) {
       console.error(`❌ Error fetching DNS records:`, error);
@@ -229,28 +262,43 @@ class SubdomainService {
    * Check if DNS changes have propagated
    * @param {string} fullDomain - The full subdomain (e.g., 'www.example.com')
    * @param {string} recordType - DNS record type
+   * @param {string} expectedValue - Expected DNS value
    * @returns {Promise<Object>} Propagation status
    */
-  async checkDNSPropagation(fullDomain, recordType) {
+  async checkDNSPropagation(fullDomain, recordType, expectedValue) {
     try {
-      console.log(`🔍 Checking DNS propagation for ${fullDomain} (${recordType})`);
+      console.log(`🔍 Checking DNS propagation for ${fullDomain} (${recordType}) expecting: ${expectedValue}`);
 
-      // Note: In a real implementation, you would use DNS lookup tools
-      // or third-party services to check propagation status
-      
-      // Simulate propagation check
-      const isPropagated = Math.random() > 0.3; // 70% chance of being propagated
-      
-      const result = {
-        domain: fullDomain,
-        recordType,
-        propagated: isPropagated,
-        checkedAt: new Date().toISOString(),
-        message: isPropagated ? 'DNS changes have propagated' : 'DNS changes still propagating'
-      };
+      // Split domain to get subdomain and main domain
+      const parts = fullDomain.split('.');
+      const subdomain = parts[0];
+      const domain = parts.slice(1).join('.');
 
-      console.log(`${isPropagated ? '✅' : '⏳'} DNS propagation check result:`, result);
-      return result;
+      // Use actual Namecheap API to check DNS propagation
+      const result = await this.dnsProvider.checkDnsPropagation(
+        subdomain, 
+        domain, 
+        recordType, 
+        expectedValue
+      );
+
+      if (result.success) {
+        const propagationResult = {
+          domain: fullDomain,
+          recordType,
+          propagated: result.propagated,
+          actualValue: result.actualValue,
+          expectedValue: expectedValue,
+          checkedAt: new Date().toISOString(),
+          message: result.propagated ? 'DNS changes have propagated' : 'DNS changes still propagating'
+        };
+
+        console.log(`${result.propagated ? '✅' : '⏳'} DNS propagation check result:`, propagationResult);
+        return propagationResult;
+      } else {
+        console.error(`❌ Failed to check DNS propagation: ${result.message}`);
+        throw new Error(result.message || 'Failed to check DNS propagation');
+      }
 
     } catch (error) {
       console.error(`❌ Error checking DNS propagation:`, error);

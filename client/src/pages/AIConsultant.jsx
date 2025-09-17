@@ -667,23 +667,6 @@ const AIConsultant = () => {
             </div>
           </motion.div>
         )}
-
-        {/* Debug Info */}
-        <div className="mt-8 p-4 bg-gray-100 rounded-lg border">
-          <h4 className="text-sm font-medium text-gray-700 mb-2">
-            Debug Information
-          </h4>
-          <div className="text-xs text-gray-500">
-            <div>
-              <strong>Authenticated:</strong> {isAuthenticated ? "Yes" : "No"}
-            </div>
-            {isAuthenticated && user && (
-              <div>
-                <strong>User:</strong> {user.email}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

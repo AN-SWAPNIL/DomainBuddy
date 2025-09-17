@@ -5,7 +5,7 @@ const API_URL =
   import.meta.env.VITE_NGROK_URL ||
   import.meta.env.VITE_API_URL ||
   "http://localhost:5001/api";
-const API_TIMEOUT = import.meta.env.VITE_API_TIMEOUT || 30000; // Increased to 30 seconds for AI requests
+const API_TIMEOUT = import.meta.env.VITE_API_TIMEOUT || 60000; // Increased to 60 seconds (1 minute) for AI requests
 
 console.log("🌐 Using API URL:", API_URL);
 
